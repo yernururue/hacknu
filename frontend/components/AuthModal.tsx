@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { supabase } from "@/lib/supabase";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -20,10 +21,13 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setMounted(true);
   }, []);
 
+  const [isSignUp, setIsSignUp] = useState(false);
+
   // Reset state when modal opens
   useEffect(() => {
     if (isOpen) {
       setMode("choose");
+      setIsSignUp(false);
       setEmail("");
       setPassword("");
     }
@@ -46,17 +50,42 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   if (!isOpen || !mounted) return null;
 
-  const handleGoogleSignIn = () => {
+  const handleGoogleSignIn = async () => {
     setLoading(true);
-    // TODO: replace with NextAuth signIn("google") or your OAuth provider
-    setTimeout(() => setLoading(false), 1500);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      alert(err.message || "Failed to sign in with Google");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleEmailSubmit = (e: React.FormEvent) => {
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // TODO: replace with email/password auth call
-    setTimeout(() => setLoading(false), 1500);
+    try {
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        alert("Account created successfully!");
+        onClose();
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        onClose();
+      }
+    } catch (err: any) {
+      alert(err.message || "Authentication failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const content = (
@@ -207,7 +236,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             {/* Email */}
             <button
               id="auth-email-btn"
-              onClick={() => setMode("email")}
+              onClick={() => { setMode("email"); setIsSignUp(false); }}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -249,7 +278,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             </p>
           </div>
         ) : (
-          <form onSubmit={handleEmailSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div style={{ display: "flex", flexDirection: "column" }}>
             <button
               type="button"
               onClick={() => setMode("choose")}
@@ -271,79 +300,100 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
               ← Back
             </button>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "13px", fontWeight: 500, color: "#333" }}>Email</label>
-              <input
-                id="auth-email-input"
-                type="email"
-                required
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+            <form onSubmit={handleEmailSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "13px", fontWeight: 500, color: "#333" }}>Email</label>
+                <input
+                  id="auth-email-input"
+                  type="email"
+                  required
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  style={{
+                    height: "42px",
+                    borderRadius: "8px",
+                    border: "1px solid #e2e2e2",
+                    padding: "0 12px",
+                    fontSize: "14px",
+                    color: "#1a1a1a",
+                    outline: "none",
+                    transition: "border-color 0.15s",
+                    pointerEvents: "auto",
+                  }}
+                  onFocus={(e) => (e.target.style.borderColor = "#1a1a1a")}
+                  onBlur={(e) => (e.target.style.borderColor = "#e2e2e2")}
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "13px", fontWeight: 500, color: "#333" }}>Password</label>
+                <input
+                  id="auth-password-input"
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={{
+                    height: "42px",
+                    borderRadius: "8px",
+                    border: "1px solid #e2e2e2",
+                    padding: "0 12px",
+                    fontSize: "14px",
+                    color: "#1a1a1a",
+                    outline: "none",
+                    transition: "border-color 0.15s",
+                    pointerEvents: "auto",
+                  }}
+                  onFocus={(e) => (e.target.style.borderColor = "#1a1a1a")}
+                  onBlur={(e) => (e.target.style.borderColor = "#e2e2e2")}
+                />
+              </div>
+
+              <button
+                id="auth-submit-btn"
+                type="submit"
+                disabled={loading}
                 style={{
-                  height: "42px",
-                  borderRadius: "8px",
-                  border: "1px solid #e2e2e2",
-                  padding: "0 12px",
+                  marginTop: "4px",
+                  height: "44px",
+                  borderRadius: "10px",
+                  border: "none",
+                  backgroundColor: "#1a1a1a",
+                  color: "#fff",
                   fontSize: "14px",
-                  color: "#1a1a1a",
-                  outline: "none",
-                  transition: "border-color 0.15s",
+                  fontWeight: 600,
+                  cursor: loading ? "not-allowed" : "pointer",
+                  transition: "opacity 0.15s",
+                  opacity: loading ? 0.7 : 1,
                   pointerEvents: "auto",
                 }}
-                onFocus={(e) => (e.target.style.borderColor = "#1a1a1a")}
-                onBlur={(e) => (e.target.style.borderColor = "#e2e2e2")}
-              />
-            </div>
+              >
+                {loading ? (isSignUp ? "Signing up…" : "Signing in…") : (isSignUp ? "Create account" : "Sign in")}
+              </button>
+            </form>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "13px", fontWeight: 500, color: "#333" }}>Password</label>
-              <input
-                id="auth-password-input"
-                type="password"
-                required
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+            <div style={{ marginTop: "16px", textAlign: "center" }}>
+              <button
+                type="button"
+                onClick={() => setIsSignUp(!isSignUp)}
                 style={{
-                  height: "42px",
-                  borderRadius: "8px",
-                  border: "1px solid #e2e2e2",
-                  padding: "0 12px",
-                  fontSize: "14px",
-                  color: "#1a1a1a",
-                  outline: "none",
-                  transition: "border-color 0.15s",
+                  background: "none",
+                  border: "none",
+                  color: "#666",
+                  fontSize: "13px",
+                  cursor: "pointer",
+                  textDecoration: "underline",
                   pointerEvents: "auto",
                 }}
-                onFocus={(e) => (e.target.style.borderColor = "#1a1a1a")}
-                onBlur={(e) => (e.target.style.borderColor = "#e2e2e2")}
-              />
+              >
+                {isSignUp ? "Already have an account? Sign in" : "Don't have an account? Sign up"}
+              </button>
             </div>
-
-            <button
-              id="auth-submit-btn"
-              type="submit"
-              disabled={loading}
-              style={{
-                marginTop: "4px",
-                height: "44px",
-                borderRadius: "10px",
-                border: "none",
-                backgroundColor: "#1a1a1a",
-                color: "#fff",
-                fontSize: "14px",
-                fontWeight: 600,
-                cursor: loading ? "not-allowed" : "pointer",
-                transition: "opacity 0.15s",
-                opacity: loading ? 0.7 : 1,
-                pointerEvents: "auto",
-              }}
-            >
-              {loading ? "Signing in…" : "Sign in"}
-            </button>
-          </form>
+          </div>
         )}
+
       </div>
 
       <style>{`

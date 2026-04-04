@@ -1,20 +1,24 @@
-"use client";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase-server";
 
-import CollaborativeTldraw from "@/components/CollaborativeTldraw";
-import { Room } from "@/app/Room";
-import { SignInButton } from "@/components/SignInButton";
-import { TLComponents } from "tldraw";
-
-const components: TLComponents = {
-  SharePanel: SignInButton,
-};
-
-export default function Home() {
-  return (
-    <Room>
-      <div className="fixed inset-0 w-full h-full bg-white overflow-hidden">
-        <CollaborativeTldraw components={components} />
-      </div>
-    </Room>
-  );
+export default async function Home() {
+  const newRoomId = crypto.randomUUID();
+  
+  // Try to associate this new board with the current user
+  const supabase = await createClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (session?.user) {
+    // We intentionally ignore errors here so that if the table doesn't exist yet, 
+    // it won't crash the homepage entirely and blocks them from drawing.
+    await supabase.from('boards').insert({
+      id: newRoomId,
+      user_id: session.user.id,
+      title: "Untitled Board",
+      link_access: "edit"
+    });
+  }
+  
+  // Instantly bump the user into their fresh new canvas
+  redirect(`/b/${newRoomId}`);
 }

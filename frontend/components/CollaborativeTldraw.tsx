@@ -5,29 +5,26 @@ import { Tldraw, TLComponents, Editor } from "tldraw";
 import "tldraw/tldraw.css";
 import { useSync } from "@/lib/useSync";
 import { registerEditor } from "@/lib/agentActions";
-import { useCallback } from "react";
+import { useCallback, useState, useEffect } from "react";
 
 /**
  * Inner canvas — lives inside ClientSideSuspense so Liveblocks hooks are
  * only called on the client. Registers the editor instance with agentActions
  * so placeAgentShape() is always callable.
  */
-function Canvas({ components }: { components?: TLComponents }) {
+function Canvas({ components, isReadonly }: { components?: TLComponents; isReadonly?: boolean }) {
   const storeWithStatus = useSync();
+  const [editor, setEditor] = useState<Editor | null>(null);
 
-  const handleMount = useCallback((editor: Editor) => {
-    registerEditor(editor);
+  const handleMount = useCallback((mountedEditor: Editor) => {
+    registerEditor(mountedEditor);
+    setEditor(mountedEditor);
 
     // Give agent shapes a distinct visual treatment via CSS custom property
-    // tldraw note shapes with color="orange" already look distinct; this adds
-    // a subtle glowing border to anything with data-agent="true" in the future.
     const style = document.createElement("style");
     style.id = "agent-shape-styles";
     style.textContent = `
-      /* Agent-created note shapes get an orange drop-shadow ring */
-      .tl-shape[data-shape-type="note"] {
-        transition: filter 0.15s ease;
-      }
+      .tl-shape[data-shape-type="note"] { transition: filter 0.15s ease; }
       .tl-shape[data-shape-type="note"].tl-shape__is-agent {
         filter: drop-shadow(0 0 6px rgba(255, 140, 0, 0.85));
       }
@@ -39,10 +36,17 @@ function Canvas({ components }: { components?: TLComponents }) {
 
   const handleUnmount = useCallback(() => {
     registerEditor(null);
+    setEditor(null);
   }, []);
 
+  useEffect(() => {
+    if (editor) {
+      editor.updateInstanceState({ isReadonly: !!isReadonly });
+    }
+  }, [editor, isReadonly]);
+
   return (
-    <div style={{ position: "fixed", inset: 0 }}>
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <Tldraw
         store={storeWithStatus.store}
         components={components}
@@ -62,15 +66,17 @@ function Canvas({ components }: { components?: TLComponents }) {
  */
 export default function CollaborativeTldraw({
   components,
+  isReadonly = false,
 }: {
   components?: TLComponents;
+  isReadonly?: boolean;
 }) {
   return (
     <ClientSideSuspense
       fallback={
         <div
           style={{
-            position: "fixed",
+            position: "absolute",
             inset: 0,
             display: "flex",
             alignItems: "center",
@@ -86,7 +92,7 @@ export default function CollaborativeTldraw({
         </div>
       }
     >
-      <Canvas components={components} />
+      <Canvas components={components} isReadonly={isReadonly} />
     </ClientSideSuspense>
   );
 }
