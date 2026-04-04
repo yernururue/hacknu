@@ -6,7 +6,7 @@ Core AI agent: loads prompts, calls Gemini, parses response into action dicts.
 import json
 from pathlib import Path
 
-from backend.models.schemas import FALLBACK_ACTION
+from backend.models.schemas import FALLBACK_ACTION, CanvasShape
 from backend.services.gemini_service import call_gemini
 
 # Resolve paths relative to THIS file so they work regardless of cwd
@@ -19,6 +19,26 @@ def _load_text(path: Path) -> str:
     if path.exists():
         return path.read_text(encoding="utf-8").strip()
     return ""
+
+
+def build_canvas_context(shapes: list[CanvasShape]) -> str:
+    """
+    Format canvas state for the model: ids, types, positions, colors, and text.
+    """
+    if not shapes:
+        return "Canvas is empty. No existing stickies."
+
+    lines: list[str] = ["Current canvas contents:"]
+    for s in shapes:
+        stype = getattr(s, "type", None) or "sticky"
+        color = getattr(s, "color", "") or "yellow"
+        body = (s.text or "").replace("'", "\\'")
+        lines.append(
+            f"  - id={s.id} type={stype} at ({int(s.x)},{int(s.y)}) "
+            f"color={color}: '{body}'"
+        )
+    lines.append(f"Total: {len(shapes)} items")
+    return "\n".join(lines)
 
 
 def _load_system_prompt(agent_mode: str) -> str:

@@ -19,6 +19,8 @@ export interface CanvasShapePayload {
   x: number;
   y: number;
   shape_type: string;
+  /** Sticky / geo stroke color when available (for AI context). */
+  color?: string;
 }
 
 /** Payload from POST /agent/message SSE (flexible per action type). */
@@ -36,6 +38,9 @@ export interface AgentAction {
   to_id?: string;
   /** Group title or arrow edge label */
   label?: string;
+  group_id?: string;
+  source_sticky_id?: string;
+  prompt?: string;
 }
 
 type ShapeUtilWithText = {
@@ -71,6 +76,11 @@ function getPlainTextFromShape(editor: Editor, shape: TLShape): string {
   return "";
 }
 
+function shapeColorForPayload(shape: TLShape): string | undefined {
+  const props = shape.props as { color?: string };
+  return typeof props.color === "string" && props.color.length > 0 ? props.color : undefined;
+}
+
 /**
  * Maps the current page shapes to the payload format expected by the backend.
  */
@@ -81,6 +91,7 @@ export function extractCanvasShapes(editor: Editor): CanvasShapePayload[] {
     x: shape.x,
     y: shape.y,
     shape_type: shape.type,
+    color: shapeColorForPayload(shape),
   }));
 }
 
@@ -157,7 +168,14 @@ export async function sendToAgent(
 
       if (parsed.event === "action" && parsed.data) {
         try {
-          actions.push(JSON.parse(parsed.data) as AgentAction);
+          const raw = JSON.parse(parsed.data) as unknown;
+          // SSE payload may be one action or a JSON array of actions
+          const batch = Array.isArray(raw) ? raw : [raw];
+          for (const item of batch) {
+            if (item && typeof item === "object" && !Array.isArray(item)) {
+              actions.push(item as AgentAction);
+            }
+          }
         } catch {
           console.error("Failed to parse agent action JSON:", parsed.data);
         }

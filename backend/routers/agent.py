@@ -4,9 +4,8 @@ from fastapi import APIRouter, HTTPException
 from sse_starlette.sse import EventSourceResponse
 from starlette.concurrency import run_in_threadpool
 
-from ai.agent_loop import run_agent
+from ai.agent_loop import build_canvas_context, run_agent
 from backend.models.schemas import AgentRequest, FALLBACK_ACTION
-from backend.services.canvas_service import build_canvas_context
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 

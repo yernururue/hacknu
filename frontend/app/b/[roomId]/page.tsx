@@ -11,6 +11,7 @@ import { useBoardsList } from "@/hooks/useBoardsList";
 import { useRouter } from "next/navigation";
 import ChatInput from "@/components/ChatInput";
 import ControlPanel from "@/components/ControlPanel";
+import { agentCanvasLayerComponents } from "@/components/AgentCanvasLayers";
 import { AgentMode, sendToAgent, extractCanvasShapes } from "@/lib/agent";
 import { getEditor, applyBackendAgentAction } from "@/lib/agentActions";
 
@@ -95,6 +96,7 @@ function CustomMainMenu() {
 const components: TLComponents = {
   SharePanel: TopNavWrapper,
   MainMenu: CustomMainMenu,
+  ...agentCanvasLayerComponents,
 };
 
 export default function BoardPage({ params }: { params: Promise<{ roomId: string }> }) {
