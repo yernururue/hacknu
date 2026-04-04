@@ -3,50 +3,86 @@ gemini_service.py
 Thin wrapper around the Google Generative AI SDK.
 """
 
+import json
+import logging
 import os
-import google.generativeai as genai
+from google import genai
+from google.genai import types  # noqa: F401
 
+logger = logging.getLogger(__name__)
 
 _configured = False
+_DEFAULT_MODEL = "gemini-2.5-flash"
 
 
 def _ensure_configured():
-    """Configure the SDK once using the API key from the environment."""
+    """Ensure an API key is available (GEMINI_API_KEY or GOOGLE_API_KEY)."""
     global _configured
     if not _configured:
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
+        if not (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")):
             raise RuntimeError(
                 "GEMINI_API_KEY is not set. "
                 "Copy backend/.env.example to backend/.env and add your key."
             )
-        genai.configure(api_key=api_key)
         _configured = True
 
 
-def call_gemini(system_prompt: str, user_prompt: str) -> str:
-    """
-    Send a single request to Gemini and return the text response.
+def call_gemini(
+    prompt: str, image_data: str | None = None, audio_data: str | None = None
+) -> str:
+    try:
+        _ensure_configured()
 
-    Args:
-        system_prompt: The full system instruction (persona + rules).
-        user_prompt:   The combined user message + canvas context.
+        parts: list = [{"text": prompt}]
 
-    Returns:
-        Raw text from the model.
-    """
-    _ensure_configured()
+        if image_data:
+            raw_b64 = image_data.split(",")[-1]
+            parts.append(
+                {
+                    "inline_data": {
+                        "mime_type": "image/png",
+                        "data": raw_b64,
+                    }
+                }
+            )
 
-    model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
-        system_instruction=system_prompt,
-        generation_config=genai.GenerationConfig(
-            temperature=0.8,
-            top_p=0.95,
-            max_output_tokens=2048,
-            response_mime_type="application/json",
-        ),
-    )
+        if audio_data:
+            raw_b64 = audio_data.split(",")[-1]
+            parts.append(
+                {
+                    "inline_data": {
+                        "mime_type": "audio/webm",
+                        "data": raw_b64,
+                    }
+                }
+            )
 
-    response = model.generate_content(user_prompt)
-    return response.text
+        model = (os.getenv("GEMINI_MODEL") or _DEFAULT_MODEL).strip() or _DEFAULT_MODEL
+
+        client = genai.Client()
+        response = client.models.generate_content(
+            model=model,
+            contents=parts,
+        )
+        return response.text or ""
+    except Exception as exc:
+        logger.exception("call_gemini failed: %s", exc)
+        err = str(exc)
+        content = "I had trouble processing that"
+        if "RESOURCE_EXHAUSTED" in err or (
+            "429" in err and "quota" in err.lower()
+        ):
+            content = (
+                "Gemini quota or rate limit hit — wait and retry, check billing, "
+                "or set GEMINI_MODEL in .env (e.g. gemini-2.5-flash)."
+            )
+        return json.dumps(
+            {
+                "action": "place_sticky",
+                "content": content,
+                "x": 400,
+                "y": 400,
+                "reasoning": "fallback due to error",
+                "tentative": False,
+            }
+        )

@@ -14,19 +14,14 @@ def build_canvas_context(shapes: list[CanvasShape]) -> str:
     Returns an empty-canvas notice when there are no shapes.
     """
     if not shapes:
-        return "The canvas is currently empty. You have full freedom to place ideas anywhere."
+        return "Canvas is empty."
 
-    lines = [f"The canvas currently has {len(shapes)} shape(s):\n"]
-
-    for i, shape in enumerate(shapes, start=1):
-        text_preview = shape.text.strip()[:80] if shape.text.strip() else "(empty)"
+    lines = []
+    for shape in shapes:
+        body = shape.text.replace("'", "\\'")
+        color = shape.color if shape.color else "default"
         lines.append(
-            f"  {i}. [{shape.type}] \"{text_preview}\" at position ({shape.x:.0f}, {shape.y:.0f})"
+            f"Sticky id={shape.id} at ({shape.x:.0f},{shape.y:.0f}) color={color}: '{body}'"
         )
-
-    lines.append(
-        "\nPlace new ideas in open space to avoid overlapping existing shapes. "
-        "Each sticky note occupies roughly 200×200 pixels."
-    )
 
     return "\n".join(lines)

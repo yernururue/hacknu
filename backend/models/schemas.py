@@ -13,17 +13,23 @@ class CanvasShape(BaseModel):
     text: str = ""
     x: float = 0.0
     y: float = 0.0
+    color: str = ""
 
 
 class AgentRequest(BaseModel):
     """Incoming request from the frontend."""
 
-    message: str = Field(..., min_length=1, description="User's brainstorming prompt")
+    message: str = Field(
+        default="",
+        description="User prompt; required non-empty for /agent/message, may be empty for /agent/analyze",
+    )
     canvas_state: list[CanvasShape] = Field(
         default_factory=list, description="Current shapes on canvas"
     )
     session_id: str = Field(default="default", description="Session identifier")
     agent_mode: str = Field(default="idea_generator", description="AI persona mode")
+    image_data: str | None = None  # base64-encoded canvas screenshot (e.g. PNG)
+    audio_data: str | None = None  # base64-encoded voice recording (e.g. webm/mp3)
 
 
 class StickyAction(BaseModel):

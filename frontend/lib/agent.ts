@@ -21,13 +21,21 @@ export interface CanvasShapePayload {
   shape_type: string;
 }
 
+/** Payload from POST /agent/message SSE (flexible per action type). */
 export interface AgentAction {
   action: string;
-  content: string;
-  x: number;
-  y: number;
-  reasoning: string;
-  tentative: boolean;
+  content?: string;
+  x?: number;
+  y?: number;
+  reasoning?: string;
+  tentative?: boolean;
+  color?: string;
+  id?: string;
+  ids?: string[];
+  from_id?: string;
+  to_id?: string;
+  /** Group title or arrow edge label */
+  label?: string;
 }
 
 type ShapeUtilWithText = {
@@ -95,12 +103,14 @@ function parseSseEventBlock(block: string): { event: string; data: string } | nu
 
 /**
  * POSTs to the agent SSE endpoint, reads the stream, and returns all parsed `action` payloads.
+ * @param audioData - Optional full data URI (`data:audio/webm;base64,...`) for voice input.
  */
 export async function sendToAgent(
   message: string,
   canvasShapes: CanvasShapePayload[],
   mode: AgentMode,
-  sessionId: string = DEFAULT_SESSION_ID
+  sessionId: string = DEFAULT_SESSION_ID,
+  audioData?: string
 ): Promise<AgentAction[]> {
   const response = await fetch(`${BACKEND_URL}/agent/message`, {
     method: "POST",
@@ -110,6 +120,7 @@ export async function sendToAgent(
       canvas_state: canvasShapes,
       session_id: sessionId,
       agent_mode: mode,
+      ...(audioData !== undefined && audioData !== "" ? { audio_data: audioData } : {}),
     }),
   });
 
@@ -160,12 +171,5 @@ export async function sendToAgent(
 }
 
 export function actionsEqual(a: AgentAction, b: AgentAction): boolean {
-  return (
-    a.content === b.content &&
-    a.x === b.x &&
-    a.y === b.y &&
-    a.tentative === b.tentative &&
-    a.reasoning === b.reasoning &&
-    a.action === b.action
-  );
+  return JSON.stringify(a) === JSON.stringify(b);
 }

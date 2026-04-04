@@ -133,7 +133,7 @@ export default function AgentSuggestion({
                   margin: 0,
                 }}
               >
-                {action.content}
+                {action.content ?? ""}
               </p>
             </div>
           </div>
@@ -166,7 +166,7 @@ export default function AgentSuggestion({
                 margin: 0,
               }}
             >
-              &ldquo;{action.reasoning}&rdquo;
+              &ldquo;{action.reasoning ?? ""}&rdquo;
             </p>
           </div>
 

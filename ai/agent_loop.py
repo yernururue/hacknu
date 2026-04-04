@@ -1,12 +1,12 @@
 """
 agent_loop.py
-Core AI agent: loads prompts, calls Gemini, parses response into StickyActions.
+Core AI agent: loads prompts, calls Gemini, parses response into action dicts.
 """
 
 import json
 from pathlib import Path
 
-from backend.models.schemas import StickyAction, FALLBACK_ACTION
+from backend.models.schemas import FALLBACK_ACTION
 from backend.services.gemini_service import call_gemini
 
 # Resolve paths relative to THIS file so they work regardless of cwd
@@ -34,55 +34,47 @@ def _load_system_prompt(agent_mode: str) -> str:
     return base
 
 
-def _parse_actions(raw: str) -> list[StickyAction]:
+def _parse_actions(raw: str) -> list[dict]:
     """
-    Parse the raw Gemini response into a list of StickyAction objects.
-    Handles both a single object and an array of objects.
-    Falls back to FALLBACK_ACTION on any parse error.
+    Parse the raw Gemini response into a list of action dicts.
+    Handles both a JSON array and a legacy single object (wrapped as one-element list).
+    Falls back to FALLBACK_ACTION on any parse error or empty result.
     """
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        first_newline = cleaned.index("\n")
-        cleaned = cleaned[first_newline + 1 :]
-    if cleaned.endswith("```"):
-        cleaned = cleaned[:-3]
-    cleaned = cleaned.strip()
+    clean = raw.strip()
+    if clean.startswith("```"):
+        clean = clean.split("```")[1]
+        if clean.startswith("json"):
+            clean = clean[4:]
+    clean = clean.strip()
 
     try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError:
-        return [FALLBACK_ACTION]
-
-    if isinstance(data, dict):
-        data = [data]
-
-    if not isinstance(data, list):
-        return [FALLBACK_ACTION]
-
-    actions: list[StickyAction] = []
-    for item in data:
-        try:
-            actions.append(StickyAction(**item))
-        except Exception:
-            continue
-
-    return actions if actions else [FALLBACK_ACTION]
+        data = json.loads(clean)
+        if isinstance(data, dict):
+            data = [data]
+        if not isinstance(data, list):
+            return [FALLBACK_ACTION.model_dump()]
+        actions = [item for item in data if isinstance(item, dict)]
+        return actions if actions else [FALLBACK_ACTION.model_dump()]
+    except Exception:
+        return [FALLBACK_ACTION.model_dump()]
 
 
 def run_agent(
-    user_message: str,
     canvas_context: str,
+    user_message: str,
     agent_mode: str = "idea_generator",
-) -> list[StickyAction]:
+    image_data: str | None = None,
+    audio_data: str | None = None,
+) -> list[dict]:
     """
     Main agent function called by the backend.
 
     1. Loads and assembles the system prompt with the chosen persona.
     2. Builds a user prompt combining the canvas state and user message.
     3. Calls Gemini.
-    4. Parses the response into validated StickyAction objects.
+    4. Parses the response into action dicts (flexible JSON for the frontend).
 
-    Returns a list of StickyAction objects (always at least one — the fallback).
+    Returns a list of dicts (always at least one — the fallback).
     """
     system_prompt = _load_system_prompt(agent_mode)
 
@@ -93,6 +85,7 @@ def run_agent(
         f"{user_message}"
     )
 
-    raw_response = call_gemini(system_prompt=system_prompt, user_prompt=user_prompt)
+    full_prompt = f"{system_prompt}\n\n{user_prompt}"
+    raw = call_gemini(full_prompt, image_data=image_data, audio_data=audio_data)
 
-    return _parse_actions(raw_response)
+    return _parse_actions(raw)

@@ -6,12 +6,11 @@ import React, {
   useImperativeHandle,
   forwardRef,
 } from "react";
-import { Tldraw, Editor, createShapeId, TLComponents, TLNoteShape } from "tldraw";
+import { Tldraw, Editor, TLComponents } from "tldraw";
 import "tldraw/tldraw.css";
-import { toRichText } from "@tldraw/tlschema";
 import { ClientSideSuspense } from "@liveblocks/react";
 import { useSync } from "@/lib/useSync";
-import { registerEditor } from "@/lib/agentActions";
+import { registerEditor, applyBackendAgentAction } from "@/lib/agentActions";
 import {
   extractCanvasShapes,
   AgentAction,
@@ -45,37 +44,7 @@ const InnerCanvas = forwardRef<CanvasFullHandle, InnerCanvasProps>(
     const placeAgentShape = useCallback(
       (action: AgentAction) => {
         if (!editor) return;
-        if (action.action && action.action !== "place_sticky") return;
-
-        const shapeId = createShapeId(
-          `agent-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-        );
-
-        const props: TLNoteShape["props"] = {
-          color: "blue",
-          labelColor: "black",
-          size: "m",
-          font: "draw",
-          fontSizeAdjustment: 0,
-          align: "middle",
-          verticalAlign: "middle",
-          growY: 0,
-          url: "",
-          richText: toRichText(action.content ?? ""),
-          scale: 1,
-        };
-
-        editor.createShape<TLNoteShape>({
-          id: shapeId,
-          type: "note",
-          x: action.x ?? 200,
-          y: action.y ?? 200,
-          props,
-          meta: {
-            isAgentShape: true,
-            agentReasoning: action.reasoning,
-          },
-        });
+        applyBackendAgentAction(action);
       },
       [editor]
     );

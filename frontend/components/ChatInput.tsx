@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { sendToAgent, AgentMode, DEFAULT_SESSION_ID, extractCanvasShapes } from "@/lib/agent";
-import { placeAgentShape, getEditor } from "@/lib/agentActions";
+import { applyBackendAgentAction, getEditor } from "@/lib/agentActions";
 
 interface ChatInputProps {
   agentMode: AgentMode;
@@ -21,7 +21,136 @@ export default function ChatInput({
   const [statusText, setStatusText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+  const shouldSendVoiceRef = useRef(false);
+
+  const submitToAgent = useCallback(
+    async (message: string, audioData?: string) => {
+      const editor = getEditor();
+      if (!editor) {
+        setStatusText("Editor not ready");
+        return;
+      }
+
+      const shapes = extractCanvasShapes(editor);
+      setIsLoading(true);
+      setStatusText("Connecting…");
+
+      let streamFailed = false;
+      try {
+        const actions = await sendToAgent(message, shapes, agentMode, sessionId, audioData);
+        setStatusText("Processing…");
+        for (const action of actions) {
+          applyBackendAgentAction(action);
+        }
+      } catch (error) {
+        streamFailed = true;
+        console.error("Agent error:", error);
+        setStatusText("Error connecting to agent");
+      } finally {
+        setIsLoading(false);
+        if (!streamFailed) {
+          setStatusText("");
+        }
+      }
+    },
+    [agentMode, sessionId]
+  );
+
+  const submitToAgentRef = useRef(submitToAgent);
+  submitToAgentRef.current = submitToAgent;
+
+  useEffect(() => {
+    return () => {
+      shouldSendVoiceRef.current = false;
+      try {
+        mediaRecorderRef.current?.stop();
+      } catch {
+        /* ignore */
+      }
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    if (isLoading || !agentEnabled) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      chunksRef.current = [];
+
+      const mime =
+        typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : "";
+      const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = mr;
+
+      mr.ondataavailable = (e: BlobEvent) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+        }
+      };
+
+      mr.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+
+        const send = shouldSendVoiceRef.current;
+        shouldSendVoiceRef.current = false;
+
+        const chunks = chunksRef.current;
+        chunksRef.current = [];
+        mediaRecorderRef.current = null;
+
+        setIsRecording(false);
+
+        if (!send) {
+          return;
+        }
+
+        const blob = new Blob(chunks, {
+          type: mr.mimeType && mr.mimeType !== "" ? mr.mimeType : "audio/webm",
+        });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64 = reader.result as string;
+          void submitToAgentRef.current("voice input", base64);
+        };
+        reader.readAsDataURL(blob);
+      };
+
+      mr.start(250);
+      setIsRecording(true);
+    } catch (error) {
+      console.error("Microphone error:", error);
+      setStatusText("Microphone access denied or unavailable");
+    }
+  }, [agentEnabled, isLoading]);
+
+  const cancelRecording = useCallback(() => {
+    shouldSendVoiceRef.current = false;
+    try {
+      mediaRecorderRef.current?.stop();
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const handleSend = useCallback(async () => {
+    if (isRecording) {
+      shouldSendVoiceRef.current = true;
+      setStatusText("Preparing audio…");
+      try {
+        mediaRecorderRef.current?.stop();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+
     const trimmed = input.trim();
     if (!trimmed || isLoading || !agentEnabled) return;
 
@@ -31,36 +160,9 @@ export default function ChatInput({
       return;
     }
 
-    const shapes = extractCanvasShapes(editor);
     setInput("");
-    setIsLoading(true);
-    setStatusText("Connecting…");
-
-    let streamFailed = false;
-    try {
-      const actions = await sendToAgent(trimmed, shapes, agentMode, sessionId);
-      setStatusText("Processing…");
-      for (const action of actions) {
-        // Map the backend API response to what agentActions expects
-        placeAgentShape({
-          type: "sticky-note",
-          x: action.x,
-          y: action.y,
-          text: action.content,
-          label: action.tentative ? "❓ Suggestion" : "🤖 Agent",
-        });
-      }
-    } catch (error) {
-      streamFailed = true;
-      console.error("Agent error:", error);
-      setStatusText("Error connecting to agent");
-    } finally {
-      setIsLoading(false);
-      if (!streamFailed) {
-        setStatusText("");
-      }
-    }
-  }, [input, isLoading, agentEnabled, agentMode, sessionId]);
+    await submitToAgent(trimmed);
+  }, [input, isLoading, agentEnabled, isRecording, submitToAgent]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -76,14 +178,16 @@ export default function ChatInput({
     return null;
   }
 
+  const sendDisabled = isLoading || (!input.trim() && !isRecording);
+
   return (
     <div
       style={{
         position: "absolute",
-        bottom: 64,           // sits just above the Tldraw toolbar, matching its gap
+        bottom: 64, // sits just above the Tldraw toolbar, matching its gap
         left: "50%",
         transform: "translateX(-50%)",
-        width: "fit-content",  // matches toolbar's auto width behavior
+        width: "fit-content", // matches toolbar's auto width behavior
         minWidth: 440,
         maxWidth: 520,
         padding: 0,
@@ -117,7 +221,9 @@ export default function ChatInput({
               fontWeight: 600,
               letterSpacing: "0.08em",
               textTransform: "uppercase",
-              color: statusText.startsWith("Error") ? "#dc2626" : "#6b7280",
+              color: statusText.startsWith("Error") || statusText.includes("denied")
+                ? "#dc2626"
+                : "#6b7280",
             }}
           >
             {isLoading ? `● ${statusText}` : statusText}
@@ -130,7 +236,7 @@ export default function ChatInput({
         style={{
           background: "#ffffff",
           border: "1px solid #e2e5e9",
-          borderRadius: 12,        // same radius as Tldraw toolbar
+          borderRadius: 12, // same radius as Tldraw toolbar
           padding: "5px 5px 5px 6px",
           display: "flex",
           alignItems: "center",
@@ -142,25 +248,27 @@ export default function ChatInput({
           <button
             type="button"
             title="Start voice input"
-            onClick={() => setIsRecording(true)}
+            onClick={() => void startRecording()}
+            disabled={isLoading}
             style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               background: "transparent",
               border: "none",
-              color: "#9ca3af",
-              cursor: "pointer",
+              color: isLoading ? "#d1d5db" : "#9ca3af",
+              cursor: isLoading ? "default" : "pointer",
               padding: 6,
               borderRadius: 8,
               transition: "color 0.15s, background 0.15s",
             }}
             onMouseEnter={(e) => {
+              if (isLoading) return;
               (e.currentTarget as HTMLElement).style.color = "#4b5563";
               (e.currentTarget as HTMLElement).style.background = "#f3f4f6";
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color = "#9ca3af";
+              (e.currentTarget as HTMLElement).style.color = isLoading ? "#d1d5db" : "#9ca3af";
               (e.currentTarget as HTMLElement).style.background = "transparent";
             }}
           >
@@ -172,10 +280,15 @@ export default function ChatInput({
           </button>
         ) : (
           <div style={{ padding: "6px", display: "flex", alignItems: "center" }}>
-            <div style={{ 
-              width: 8, height: 8, borderRadius: "50%", background: "#ef4444", 
-              boxShadow: "0 0 0 2px rgba(239,68,68,0.2)"
-            }} />
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: "#ef4444",
+                boxShadow: "0 0 0 2px rgba(239,68,68,0.2)",
+              }}
+            />
           </div>
         )}
 
@@ -199,9 +312,10 @@ export default function ChatInput({
                 Listening...
               </span>
             </div>
-            
+
             <button
-              onClick={() => setIsRecording(false)}
+              type="button"
+              onClick={cancelRecording}
               style={{
                 background: "transparent",
                 border: "none",
@@ -254,15 +368,15 @@ export default function ChatInput({
         <button
           type="button"
           onClick={() => void handleSend()}
-          disabled={isLoading || !input.trim()}
+          disabled={sendDisabled}
           style={{
             width: 32,
             height: 32,
             borderRadius: 9,
             border: "none",
-            background: isLoading || (!input.trim() && !isRecording) ? "#f3f4f6" : "#1f2937",
-            color: isLoading || (!input.trim() && !isRecording) ? "#d1d5db" : "#ffffff",
-            cursor: isLoading || (!input.trim() && !isRecording) ? "default" : "pointer",
+            background: sendDisabled ? "#f3f4f6" : "#1f2937",
+            color: sendDisabled ? "#d1d5db" : "#ffffff",
+            cursor: sendDisabled ? "default" : "pointer",
             transition: "background 0.15s, color 0.15s",
             display: "flex",
             alignItems: "center",
@@ -270,12 +384,12 @@ export default function ChatInput({
             flexShrink: 0,
           }}
           onMouseEnter={(e) => {
-            if (!isLoading && (input.trim() || isRecording)) {
+            if (!sendDisabled) {
               (e.currentTarget as HTMLElement).style.background = "#111827";
             }
           }}
           onMouseLeave={(e) => {
-            if (!isLoading && (input.trim() || isRecording)) {
+            if (!sendDisabled) {
               (e.currentTarget as HTMLElement).style.background = "#1f2937";
             }
           }}

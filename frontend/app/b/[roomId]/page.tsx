@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import ChatInput from "@/components/ChatInput";
 import ControlPanel from "@/components/ControlPanel";
 import { AgentMode, sendToAgent, extractCanvasShapes } from "@/lib/agent";
-import { getEditor, placeAgentShape } from "@/lib/agentActions";
+import { getEditor, applyBackendAgentAction } from "@/lib/agentActions";
 
 function TopNavWrapper() {
   const roomId = typeof window !== "undefined" ? window.location.pathname.split('/').pop() || "" : "";
@@ -124,13 +124,7 @@ export default function BoardPage({ params }: { params: Promise<{ roomId: string
         roomId
       );
       for (const action of actions) {
-        placeAgentShape({
-          type: "sticky-note",
-          x: action.x,
-          y: action.y,
-          text: action.content,
-          label: action.tentative ? "Suggestion" : "Assistant",
-        });
+        applyBackendAgentAction(action);
       }
     } catch (error) {
       console.error("Failed to summarize:", error);
@@ -157,13 +151,7 @@ export default function BoardPage({ params }: { params: Promise<{ roomId: string
         roomId
       );
       for (const action of actions) {
-        placeAgentShape({
-          type: "sticky-note",
-          x: action.x,
-          y: action.y,
-          text: action.content,
-          label: action.tentative ? "Suggestion" : "Analysis",
-        });
+        applyBackendAgentAction(action);
       }
     } catch (error) {
       console.error("Failed to analyze:", error);
