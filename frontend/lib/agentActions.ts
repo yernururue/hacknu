@@ -54,22 +54,28 @@ export function placeAgentShape(action: AgentAction): void {
   if (action.type === "sticky-note") {
     const label = action.label ?? "🤖 Agent";
 
-    // Create a note shape (tldraw built-in "note" type)
     editor.createShape({
       type: "note",
       x: action.x,
       y: action.y,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       props: {
-        // Distinct visual style: orange background + large size
         color: "orange",
         size: "l",
-        text: `${label}\n${action.text}`,
+        // tldraw v4 uses richText for note content
+        richText: {
+          type: "doc",
+          content: [
+            {
+              type: "paragraph",
+              content: [{ type: "text", text: `${label}\n${action.text}` }],
+            },
+          ],
+        },
         align: "middle",
         verticalAlign: "middle",
         font: "draw",
-        growY: 0,
-      },
-      // meta lets us query / identify agent shapes programmatically
+      } as any,
       meta: {
         isAgentShape: true,
         agentLabel: label,
@@ -85,16 +91,16 @@ export function placeAgentShape(action: AgentAction): void {
       type: "arrow",
       x: action.fromX,
       y: action.fromY,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       props: {
         color: "orange",
         size: "l",
         bend: 0,
         start: { x: 0, y: 0 },
         end: { x: dx, y: dy },
-        text: action.label ?? "",
         arrowheadStart: "none",
         arrowheadEnd: "arrow",
-      },
+      } as any,
       meta: { isAgentShape: true },
     });
   }
