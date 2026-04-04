@@ -121,7 +121,7 @@ export default function BoardPage({ params }: { params: Promise<{ roomId: string
         "Summarize all ideas into key themes",
         shapes,
         "summarizer",
-        roomId // use current room as session id 
+        roomId
       );
       for (const action of actions) {
         placeAgentShape({
@@ -129,7 +129,7 @@ export default function BoardPage({ params }: { params: Promise<{ roomId: string
           x: action.x,
           y: action.y,
           text: action.content,
-          label: action.tentative ? "❓ Suggestion" : "🤖 Agent",
+          label: action.tentative ? "Suggestion" : "Assistant",
         });
       }
     } catch (error) {
@@ -138,6 +138,39 @@ export default function BoardPage({ params }: { params: Promise<{ roomId: string
       setSummarizeLoading(false);
     }
   }, [agentEnabled, summarizeLoading, roomId]);
+
+  // Analyze screen action
+  const handleAnalyze = useCallback(async () => {
+    if (!agentEnabled || summarizeLoading) return;
+
+    const editor = getEditor();
+    if (!editor) return;
+
+    const shapes = extractCanvasShapes(editor);
+    setSummarizeLoading(true);
+
+    try {
+      const actions = await sendToAgent(
+        "Analyze the current canvas: identify patterns, gaps, and connections between ideas",
+        shapes,
+        agentMode,
+        roomId
+      );
+      for (const action of actions) {
+        placeAgentShape({
+          type: "sticky-note",
+          x: action.x,
+          y: action.y,
+          text: action.content,
+          label: action.tentative ? "Suggestion" : "Analysis",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to analyze:", error);
+    } finally {
+      setSummarizeLoading(false);
+    }
+  }, [agentEnabled, summarizeLoading, agentMode, roomId]);
 
   return (
     <Room roomId={roomId}>
@@ -157,6 +190,7 @@ export default function BoardPage({ params }: { params: Promise<{ roomId: string
                 agentMode={agentMode}
                 onChangeMode={setAgentMode}
                 onSummarize={handleSummarize}
+                onAnalyze={handleAnalyze}
                 isLoading={summarizeLoading}
               />
               <ChatInput
