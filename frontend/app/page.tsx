@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 "use client";
 
 import CollaborativeTldraw from "@/components/CollaborativeTldraw";
@@ -18,10 +17,4 @@ export default function Home() {
       </div>
     </Room>
   );
-=======
-import Canvas from "@/components/Canvas";
-
-export default function Home() {
-  return <Canvas />;
->>>>>>> 4d00c06 (ai suggestion)
 }
