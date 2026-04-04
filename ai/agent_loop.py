@@ -1,75 +1,74 @@
 import os
-import random
-import google.generativeai as genai
+from google import genai
+from google.genai import types
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
-from tools.canvas_tools import CANVAS_TOOLS
 
-# Load environment variables from .env
+# Load environment variables
 load_dotenv()
+
+# --- Structured Output Schemas ---
+class Action(BaseModel):
+    action_type: str = Field(description="The type of action: 'place_sticky', 'suggest', or 'group'")
+    content: str = Field(description="Short text for the idea/sticky note (3-8 words)")
+    x: float = Field(description="The x coordinate for the sticky note placement")
+    y: float = Field(description="The y coordinate for the sticky note placement")
+    reasoning: str = Field(description="Reasoning for the idea and its spatial placement")
+    tentative: bool = Field(description="True if the idea is creative/risky, false if obvious")
+
+class CanvasResponse(BaseModel):
+    actions: list[Action] = Field(description="List of actions to take on the canvas")
 
 def run_agent(canvas_context: str, user_message: str, persona_text: str, system_prompt: str) -> dict:
     """
-    Executes the agent loop by calling Gemini with the specified tools.
+    Executes the agent loop by calling Gemini using native Structured Outputs.
+    Guarantees a clean dictionary return natively without fallback text strings.
     """
     gemini_api_key = os.environ.get("GEMINI_API_KEY")
     if not gemini_api_key:
-        raise ValueError("GEMINI_API_KEY environment variable is not set. Please update your .env file.")
+        raise ValueError("GEMINI_API_KEY environment variable is not set. Check your .env file.")
 
-    # Configure Gemini client
-    genai.configure(api_key=gemini_api_key)
+    # 1. Initialize the modern client
+    client = genai.Client(api_key=gemini_api_key)
     
-    # Combine the core system prompt with the dynamically injected persona
-    full_system_prompt = f"{system_prompt}\n\n{persona_text}"
-    
-    # Initialize the model (using recommended 1.5-flash for tool calling and speed)
-    model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
-        system_instruction=full_system_prompt,
-        tools=CANVAS_TOOLS
-    )
-
+    # Structure prompts
+    full_system_prompt = f"{system_prompt}\n\nPersona Instructions:\n{persona_text}"
     prompt = f"<canvas_context>\n{canvas_context}\n</canvas_context>\n\nRequest: {user_message}"
 
     try:
-        response = model.generate_content(prompt)
+        # 2. Enforce strict JSON output matching Pydantic class
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=full_system_prompt,
+                response_mime_type="application/json",
+                response_schema=CanvasResponse,
+                temperature=0.7 # Add optional creativity for brainstorming
+            )
+        )
 
-        # Parse response for a tool_call (function call) block
-        if response.candidates and response.candidates[0].content.parts:
-            for part in response.candidates[0].content.parts:
-                if part.function_call:
-                    # Safely convert protobuf args to simple Python dictionary
-                    args_dict = {}
-                    for key in part.function_call.args:
-                        val = part.function_call.args[key]
-                        # Handle iterables (like the shape_ids array) to standard list
-                        if hasattr(val, '__iter__') and not isinstance(val, str):
-                            args_dict[key] = list(val)
-                        else:
-                            args_dict[key] = val
-
-                    return {
-                        "name": part.function_call.name,
-                        "input": args_dict
-                    }
-
-        # Fallback parsing if Gemini returns a standard text block instead of tool call
-        text_content = response.text if response.text else ""
-        
-        # Extract the first 50 characters for the fallback sticky note content
-        fallback_content = text_content[:50].strip() if text_content else "Fallback sticky"
-        
-        return {
-            "name": "place_sticky",
-            "input": {
-                "content": fallback_content,
-                "x": random.randint(0, 1000),
-                "y": random.randint(0, 1000),
-                "reasoning": "Fallback triggered. Model responded with text instead of a tool call.",
-                "tentative": False
-            }
-        }
+        # 3. Model returns the fully parsed Pydantic object, return as native dict
+        if response.parsed:
+            return response.parsed.model_dump()
+        else:
+            return {"error": "Failed to parse structured output", "raw": response.text}
 
     except Exception as e:
         return {
             "error": str(e)
         }
+
+if __name__ == "__main__":
+    # Self-contained testing block to verify the implementation
+    dummy_system = "You are a brainstorming assistant. Apply spatial intelligence."
+    dummy_persona = "Focus on bold, disruptive ideas."
+    dummy_context = "Notes: 1. 'Use AI' (X:100, Y:200)"
+    dummy_request = "Give me two lateral thinking alternatives to AI."
+    
+    print("Testing Native Structured Outputs with Gemini-2.5-Flash...")
+    result = run_agent(dummy_context, dummy_request, dummy_persona, dummy_system)
+    
+    from pprint import pprint
+    print("\nFinal Clean Output Dictionary:")
+    pprint(result)
