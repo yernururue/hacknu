@@ -1,9 +1,6 @@
 fastapi
-uvicorn
-pydantic
-pydantic-settings
+uvicorn[standard]
+google-generativeai
 python-dotenv
+pydantic
 sse-starlette
-anthropic
-httpx
-groq

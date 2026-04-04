@@ -1,30 +1,48 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional, Union
+from __future__ import annotations
+
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class CanvasShape(BaseModel):
+    """A single shape on the canvas."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str
-    type: str = Field(..., description="Type of shape (e.g., sticky, box, arrow)")
-    content: str
-    x: float
-    y: float
-    color: Optional[str] = None
-    width: Optional[float] = None
-    height: Optional[float] = None
+    type: str = Field(default="sticky", alias="shape_type")
+    text: str = ""
+    x: float = 0.0
+    y: float = 0.0
 
-class AgentMessageRequest(BaseModel):
-    message: str = Field(..., description="The user's message to the agent")
-    shapes: List[CanvasShape] = Field(default_factory=list, description="Current state of the canvas")
-    agent_mode: str = Field(default="brainstorm", description="The current mode of the agent")
-    image_base64: Optional[str] = None
 
-class AgentAction(BaseModel):
-    action: str = Field(..., description="Action type: place_sticky, update_shape, delete_shape")
-    content: Optional[str] = None
-    x: Optional[float] = None
-    y: Optional[float] = None
-    shape_id: Optional[str] = None
-    reasoning: str = Field(..., description="Explanation for the action")
-    tentative: bool = Field(default=False, description="Whether the action is a suggestion or a final decision")
+class AgentRequest(BaseModel):
+    """Incoming request from the frontend."""
 
-class HealthCheck(BaseModel):
-    ok: bool = True
+    message: str = Field(..., min_length=1, description="User's brainstorming prompt")
+    canvas_state: list[CanvasShape] = Field(
+        default_factory=list, description="Current shapes on canvas"
+    )
+    session_id: str = Field(default="default", description="Session identifier")
+    agent_mode: str = Field(default="idea_generator", description="AI persona mode")
+
+
+class StickyAction(BaseModel):
+    """Action the AI wants to perform on the canvas."""
+
+    action: str = "place_sticky"
+    content: str = ""
+    x: float = 400.0
+    y: float = 300.0
+    reasoning: str = ""
+    tentative: bool = False
+
+
+# Fallback when Gemini returns garbage
+FALLBACK_ACTION = StickyAction(
+    action="place_sticky",
+    content="I couldn't generate a valid idea. Please try again.",
+    x=400,
+    y=300,
+    reasoning="AI response was malformed; returning safe fallback.",
+    tentative=True,
+)

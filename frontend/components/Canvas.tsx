@@ -1,228 +1,202 @@
 "use client";
 
-import { Tldraw, Editor, createShapeId, exportToBlob } from "tldraw";
+import React, {
+  useState,
+  useCallback,
+  useImperativeHandle,
+  forwardRef,
+} from "react";
+import { Tldraw, Editor, createShapeId, TLComponents, TLNoteShape } from "tldraw";
 import "tldraw/tldraw.css";
-import { useState, useCallback, useRef, useMemo } from "react";
-import { streamAgentMessage, AgentAction } from "@/lib/agent";
-import SuggestionCard from "./SuggestionCard";
+import { toRichText } from "@tldraw/tlschema";
+import { ClientSideSuspense } from "@liveblocks/react";
+import { useSync } from "@/lib/useSync";
+import { registerEditor } from "@/lib/agentActions";
+import {
+  extractCanvasShapes,
+  AgentAction,
+  CanvasShapePayload,
+  actionsEqual,
+} from "@/lib/agent";
+import AgentSuggestion from "./AgentSuggestion";
 
-export default function Canvas() {
-  const [editor, setEditor] = useState<Editor | null>(null);
-  const [isThinking, setIsThinking] = useState(false);
-  const [agentStatus, setAgentStatus] = useState("");
-  const [agentPos, setAgentPos] = useState({ x: 0, y: 0 });
-  const [input, setInput] = useState("");
-  const [activeSuggestions, setActiveSuggestions] = useState<AgentAction[]>([]);
+export interface CanvasHandle {
+  placeAgentShape: (action: AgentAction) => void;
+  getShapesForBackend: () => CanvasShapePayload[];
+  getEditor: () => Editor | null;
+}
 
-  const handleMount = useCallback((editor: Editor) => {
-    setEditor(editor);
-  }, []);
+export interface CanvasFullHandle extends CanvasHandle {
+  addSuggestion: (action: AgentAction) => void;
+}
 
-  const placeAgentShape = useCallback((action: AgentAction) => {
-    if (!editor) return;
+interface InnerCanvasProps {
+  components?: TLComponents;
+}
 
-    // Update agent cursor position
-    if (action.x && action.y) {
-      setAgentPos({ x: action.x, y: action.y });
-    }
+const InnerCanvas = forwardRef<CanvasFullHandle, InnerCanvasProps>(
+  function InnerCanvas({ components }, ref) {
+    const storeWithStatus = useSync();
+    const [editor, setEditor] = useState<Editor | null>(null);
+    const [activeSuggestions, setActiveSuggestions] = useState<AgentAction[]>(
+      []
+    );
 
-    switch (action.action) {
-      case "place_sticky":
-        editor.createShape({
-          id: createShapeId(action.shape_id || `agent-${Date.now()}`),
+    const placeAgentShape = useCallback(
+      (action: AgentAction) => {
+        if (!editor) return;
+        if (action.action && action.action !== "place_sticky") return;
+
+        const shapeId = createShapeId(
+          `agent-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+        );
+
+        const props: TLNoteShape["props"] = {
+          color: "blue",
+          labelColor: "black",
+          size: "m",
+          font: "draw",
+          fontSizeAdjustment: 0,
+          align: "middle",
+          verticalAlign: "middle",
+          growY: 0,
+          url: "",
+          richText: toRichText(action.content ?? ""),
+          scale: 1,
+        };
+
+        editor.createShape<TLNoteShape>({
+          id: shapeId,
           type: "note",
-          x: action.x || 100,
-          y: action.y || 100,
-          props: {
-            text: action.content || "",
-            color: (action.tentative ? "yellow" : "blue") as any,
-            size: "m",
-            font: "draw",
-            align: "middle",
-            verticalAlign: "middle",
-            growY: 0,
-            url: "",
-          } as any,
+          x: action.x ?? 200,
+          y: action.y ?? 200,
+          props,
+          meta: {
+            isAgentShape: true,
+            agentReasoning: action.reasoning,
+          },
         });
-        break;
-
-      case "update_shape":
-        if (action.shape_id) {
-          editor.updateShape({
-            id: createShapeId(action.shape_id),
-            type: "note",
-            props: {
-              text: action.content,
-            } as any,
-          });
-        }
-        break;
-
-      case "delete_shape":
-        if (action.shape_id) {
-          editor.deleteShape(createShapeId(action.shape_id));
-        }
-        break;
-      
-      default:
-        console.warn("Unhandled agent action:", action.action);
-    }
-  }, [editor]);
-
-  const handleApproveSuggestion = useCallback((action: AgentAction) => {
-    // Call place shape with tentative: false
-    placeAgentShape({ ...action, tentative: false });
-    // Remove from active suggestions
-    setActiveSuggestions(prev => prev.filter(s => s !== action));
-  }, [placeAgentShape]);
-
-  const handleDismissSuggestion = useCallback((action: AgentAction) => {
-    // Remove from active suggestions
-    setActiveSuggestions(prev => prev.filter(s => s !== action));
-  }, []);
-
-  const handleSend = async () => {
-    if (!input.trim() || !editor) return;
-
-    const userMessage = input;
-    setInput("");
-    setIsThinking(true);
-    setAgentStatus("Thinking...");
-
-    // Get current shapes for context
-    const shapes = Array.from(editor.getCurrentPageShapes().values()).map(s => ({
-        id: s.id,
-        type: s.type,
-        content: (s.props as any).text || (s.props as any).label || "",
-        x: s.x,
-        y: s.y,
-        color: (s.props as any).color,
-    }));
-
-    // Capture the canvas image
-    let imageBase64: string | undefined = undefined;
-    const currentShapeIds = Array.from(editor.getCurrentPageShapeIds());
-    if (currentShapeIds.length > 0) {
-      try {
-        const blob = await exportToBlob({
-          editor: editor,
-          ids: currentShapeIds,
-          format: "png",
-        });
-        
-        imageBase64 = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
-      } catch (err) {
-        console.error("Failed to capture canvas image:", err);
-      }
-    }
-
-    await streamAgentMessage(userMessage, shapes, "brainstorm", imageBase64, {
-      onThinking: (text) => {
-        setAgentStatus(text);
       },
-      onAction: (action) => {
-        if (action.tentative) {
-          setActiveSuggestions(prev => {
-              if (prev.length >= 3) {
-                  // Keep newest 3
-                  return [...prev.slice(1), action];
-              }
-              return [...prev, action];
-          });
-          // Still update agent pose so we know where it suggested
-          if (action.x && action.y) {
-            setAgentPos({ x: action.x, y: action.y });
-          }
-        } else {
-          placeAgentShape(action);
-        }
-      },
-      onClose: () => {
-        setIsThinking(false);
-        setAgentStatus("");
-      },
-      onError: (err) => {
-        console.error("Agent error:", err);
-        setIsThinking(false);
-        setAgentStatus("Error connecting to agent.");
-      },
-    });
-  };
+      [editor]
+    );
 
-  return (
-    <div className="relative w-full h-screen bg-slate-50 flex flex-col">
-      {/* Canvas Area */}
-      <div className="flex-grow relative">
-        <Tldraw onMount={handleMount} />
+    const getShapesForBackend = useCallback((): CanvasShapePayload[] => {
+      if (!editor) return [];
+      return extractCanvasShapes(editor);
+    }, [editor]);
 
-        {/* Ghost Cursor / Agent Thinking Indicator */}
-        {isThinking && (
-          <div 
-            className="absolute z-[1000] pointer-events-none transition-all duration-500 ease-in-out"
-            style={{ 
-              left: agentPos.x, 
-              top: agentPos.y,
-              transform: 'translate(-50%, -50%)' 
-            }}
-          >
-            <div className="relative">
-              <div className="w-6 h-6 bg-blue-500 rounded-full animate-ping absolute opacity-40"></div>
-              <div className="w-6 h-6 bg-blue-600 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
-                <span className="text-[10px] text-white font-bold">AI</span>
-              </div>
-              <div className="absolute left-8 top-0 bg-white/90 backdrop-blur px-2 py-1 rounded-md shadow-sm border border-slate-200 whitespace-nowrap">
-                <p className="text-xs font-medium text-slate-700">{agentStatus}</p>
-              </div>
-            </div>
-          </div>
-        )}
+    const getEditor = useCallback(() => editor, [editor]);
 
-        {/* Active Suggestions */}
+    const addSuggestion = useCallback((action: AgentAction) => {
+      setActiveSuggestions((prev) => {
+        const next = [...prev, action];
+        if (next.length <= 3) return next;
+        return next.slice(next.length - 3);
+      });
+    }, []);
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        placeAgentShape,
+        getShapesForBackend,
+        getEditor,
+        addSuggestion,
+      }),
+      [placeAgentShape, getShapesForBackend, getEditor, addSuggestion]
+    );
+
+    const handleMount = useCallback((ed: Editor) => {
+      setEditor(ed);
+      registerEditor(ed);
+    }, []);
+
+    const handleApproveSuggestion = useCallback(
+      (action: AgentAction) => {
+        placeAgentShape(action);
+        setActiveSuggestions((prev) =>
+          prev.filter((s) => !actionsEqual(s, action))
+        );
+      },
+      [placeAgentShape]
+    );
+
+    const handleDismissSuggestion = useCallback((action: AgentAction) => {
+      setActiveSuggestions((prev) =>
+        prev.filter((s) => !actionsEqual(s, action))
+      );
+    }, []);
+
+    return (
+      <div style={{ position: "relative", width: "100%", height: "100%" }}>
+        <div style={{ position: "absolute", inset: 0 }}>
+          <Tldraw
+            store={storeWithStatus.store}
+            components={components}
+            onMount={handleMount}
+            autoFocus
+          />
+        </div>
+
         {activeSuggestions.map((suggestion, index) => (
-          <SuggestionCard 
-            key={suggestion.shape_id || `suggest-${index}`}
+          <AgentSuggestion
+            key={`${suggestion.x}-${suggestion.y}-${suggestion.content}-${index}`}
             action={suggestion}
-            editor={editor}
             onApprove={handleApproveSuggestion}
             onDismiss={handleDismissSuggestion}
           />
         ))}
       </div>
+    );
+  }
+);
 
-      {/* Agent Input Bar */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-xl px-4 z-[2000]">
-        <div className="bg-white/80 backdrop-blur-xl border border-slate-200 shadow-2xl rounded-2xl p-2 flex items-center gap-2 group transition-all focus-within:ring-2 focus-within:ring-blue-500/20">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder="Ask AI to brainstorm, group, or organize..."
-            className="flex-grow bg-transparent border-none outline-none px-4 py-2 text-slate-800 placeholder:text-slate-400"
-            disabled={isThinking}
-          />
-          <button
-            onClick={handleSend}
-            disabled={isThinking || !input.trim()}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-medium px-4 py-2 rounded-xl transition-all shadow-md active:scale-95"
+const Canvas = forwardRef<CanvasFullHandle, { components?: TLComponents }>(
+  function Canvas({ components }, ref) {
+    return (
+      <ClientSideSuspense
+        fallback={
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "#fafbfc",
+              fontFamily: "'Inter', -apple-system, sans-serif",
+              fontSize: 14,
+              color: "#94a3b8",
+              letterSpacing: "0.02em",
+            }}
           >
-            {isThinking ? "..." : "Ask Agent"}
-          </button>
-        </div>
-        
-        {/* Status Bar */}
-        {isThinking && (
-            <div className="mt-2 text-center">
-                <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold animate-pulse">
-                    Agent Stream Active • {agentStatus}
-                </span>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: "50%",
+                  border: "3px solid #e2e8f0",
+                  borderTopColor: "#6366f1",
+                  animation: "spin 0.8s linear infinite",
+                }}
+              />
+              Connecting to canvas…
             </div>
-        )}
-      </div>
-    </div>
-  );
-}
+          </div>
+        }
+      >
+        <InnerCanvas ref={ref} components={components} />
+      </ClientSideSuspense>
+    );
+  }
+);
+
+export default Canvas;

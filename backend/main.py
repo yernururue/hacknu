@@ -1,31 +1,38 @@
+import sys
+import os
+from pathlib import Path
+
+# Add project root to path so `ai` package is importable
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import agent, canvas
-from core.config import settings
+from dotenv import load_dotenv
+
+from backend.routers import agent
+
+# Load environment variables from backend/.env
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 app = FastAPI(
-    title=settings.PROJECT_NAME,
-    version=settings.VERSION,
-    description="Backend for AI Brainstorm Canvas"
+    title="AI Brainstorm Canvas",
+    description="Backend for AI-powered brainstorming canvas with Gemini",
+    version="1.0.0",
 )
 
-# Configure CORS
+# CORS — allow the Next.js frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include Routers
-app.include_router(agent.router, prefix="/agent", tags=["Agent"])
-app.include_router(canvas.router, prefix="/canvas", tags=["Canvas"])
+# Routers
+app.include_router(agent.router)
+
 
 @app.get("/health")
-async def health_check():
-    return {"ok": True, "status": "active"}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=settings.PORT)
+async def health():
+    return {"ok": True}

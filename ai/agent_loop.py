@@ -1,80 +1,98 @@
-import os
-from google import genai
-from google.genai import types
-from pydantic import BaseModel, Field
-from dotenv import load_dotenv
+"""
+agent_loop.py
+Core AI agent: loads prompts, calls Gemini, parses response into StickyActions.
+"""
 
-# Load environment variables
-load_dotenv()
+import json
+from pathlib import Path
 
-# --- Structured Output Schemas ---
-class Action(BaseModel):
-    action_type: str = Field(description="The type of action: 'place_sticky', 'suggest', or 'group'")
-    content: str = Field(description="Short text for the idea/sticky note (3-8 words)")
-    x: float = Field(description="The x coordinate for the sticky note placement")
-    y: float = Field(description="The y coordinate for the sticky note placement")
-    reasoning: str = Field(description="Reasoning for the idea and its spatial placement")
-    tentative: bool = Field(description="True if the idea is creative/risky, false if obvious")
+from backend.models.schemas import StickyAction, FALLBACK_ACTION
+from backend.services.gemini_service import call_gemini
 
-class CanvasResponse(BaseModel):
-    actions: list[Action] = Field(description="List of actions to take on the canvas")
+# Resolve paths relative to THIS file so they work regardless of cwd
+_PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
+_PERSONAS_DIR = _PROMPTS_DIR / "personas"
 
-def run_agent(canvas_context: str, user_message: str, persona_text: str, system_prompt: str, image_bytes: bytes = None) -> dict:
+
+def _load_text(path: Path) -> str:
+    """Read a text file or return an empty string if missing."""
+    if path.exists():
+        return path.read_text(encoding="utf-8").strip()
+    return ""
+
+
+def _load_system_prompt(agent_mode: str) -> str:
     """
-    Executes the agent loop by calling Gemini using native Structured Outputs.
-    Guarantees a clean dictionary return natively without fallback text strings.
-    Supports multimodal vision input using an optional image_bytes attribute.
+    Build the full system prompt by combining the base system prompt
+    with the persona addon for the requested mode.
     """
-    gemini_api_key = os.environ.get("GEMINI_API_KEY")
-    if not gemini_api_key:
-        raise ValueError("GEMINI_API_KEY environment variable is not set. Check your .env file.")
+    base = _load_text(_PROMPTS_DIR / "system_prompt.txt")
+    persona = _load_text(_PERSONAS_DIR / f"{agent_mode}.txt")
 
-    # 1. Initialize the modern client
-    client = genai.Client(api_key=gemini_api_key)
-    
-    # Structure prompts
-    full_system_prompt = f"{system_prompt}\n\nPersona Instructions:\n{persona_text}"
-    text_prompt = f"<canvas_context>\n{canvas_context}\n</canvas_context>\n\nRequest: {user_message}"
-    
-    # 2. Package text and images concurrently into parts array
-    contents = [text_prompt]
-    if image_bytes is not None:
-        contents.append(types.Part.from_bytes(data=image_bytes, mime_type="image/png"))
+    if persona:
+        return f"{base}\n\n---\n\n{persona}"
+    return base
+
+
+def _parse_actions(raw: str) -> list[StickyAction]:
+    """
+    Parse the raw Gemini response into a list of StickyAction objects.
+    Handles both a single object and an array of objects.
+    Falls back to FALLBACK_ACTION on any parse error.
+    """
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        first_newline = cleaned.index("\n")
+        cleaned = cleaned[first_newline + 1 :]
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3]
+    cleaned = cleaned.strip()
 
     try:
-        # 3. Enforce strict JSON output matching Pydantic class
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=full_system_prompt,
-                response_mime_type="application/json",
-                response_schema=CanvasResponse,
-                temperature=0.7 # Add optional creativity for brainstorming
-            )
-        )
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        return [FALLBACK_ACTION]
 
-        # 4. Model returns the fully parsed Pydantic object, return as native dict
-        if response.parsed:
-            return response.parsed.model_dump()
-        else:
-            return {"error": "Failed to parse structured output", "raw": response.text}
+    if isinstance(data, dict):
+        data = [data]
 
-    except Exception as e:
-        return {
-            "error": str(e)
-        }
+    if not isinstance(data, list):
+        return [FALLBACK_ACTION]
 
-if __name__ == "__main__":
-    # Self-contained testing block to verify the implementation
-    dummy_system = "You are a brainstorming assistant. Apply spatial intelligence."
-    dummy_persona = "Focus on bold, disruptive ideas."
-    dummy_context = "Notes: 1. 'Use AI' (X:100, Y:200)"
-    dummy_request = "Give me two lateral thinking alternatives to AI."
-    
-    print("Testing Native Structured Outputs with Gemini-2.5-Flash...")
-    result = run_agent(dummy_context, dummy_request, dummy_persona, dummy_system)
-    
-    from pprint import pprint
-    print("\nFinal Clean Output Dictionary:")
-    pprint(result)
+    actions: list[StickyAction] = []
+    for item in data:
+        try:
+            actions.append(StickyAction(**item))
+        except Exception:
+            continue
+
+    return actions if actions else [FALLBACK_ACTION]
+
+
+def run_agent(
+    user_message: str,
+    canvas_context: str,
+    agent_mode: str = "idea_generator",
+) -> list[StickyAction]:
+    """
+    Main agent function called by the backend.
+
+    1. Loads and assembles the system prompt with the chosen persona.
+    2. Builds a user prompt combining the canvas state and user message.
+    3. Calls Gemini.
+    4. Parses the response into validated StickyAction objects.
+
+    Returns a list of StickyAction objects (always at least one — the fallback).
+    """
+    system_prompt = _load_system_prompt(agent_mode)
+
+    user_prompt = (
+        f"=== CANVAS STATE ===\n"
+        f"{canvas_context}\n\n"
+        f"=== USER REQUEST ===\n"
+        f"{user_message}"
+    )
+
+    raw_response = call_gemini(system_prompt=system_prompt, user_prompt=user_prompt)
+
+    return _parse_actions(raw_response)
