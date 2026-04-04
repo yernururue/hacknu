@@ -1,53 +1,28 @@
-CANVAS_TOOLS = [
-    {
-        "name": "place_sticky",
-        "description": "Place a new sticky note on the canvas.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "type": "string",
-                    "description": "Short text for the idea/sticky note (3-8 words)."
-                },
-                "x": {
-                    "type": "number",
-                    "description": "The x coordinate for the sticky note placement."
-                },
-                "y": {
-                    "type": "number",
-                    "description": "The y coordinate for the sticky note placement."
-                },
-                "reasoning": {
-                    "type": "string",
-                    "description": "Reasoning for the idea and its spatial placement."
-                },
-                "tentative": {
-                    "type": "boolean",
-                    "description": "True if the idea is creative/risky, false if obvious."
-                }
-            },
-            "required": ["content", "x", "y", "reasoning", "tentative"]
-        }
-    },
-    {
-        "name": "group_ideas",
-        "description": "Group existing ideas together under a common label.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "shape_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "description": "Array of string IDs of the shapes to group."
-                },
-                "label": {
-                    "type": "string",
-                    "description": "A summarizing label for the group."
-                }
-            },
-            "required": ["shape_ids", "label"]
-        }
-    }
-]
+# Gemini's Python SDK natively parses Python functions into JSON schemas for tool calling.
+# We define dummy functions here with type hints and docstrings.
+
+def place_sticky(content: str, x: float, y: float, reasoning: str, tentative: bool):
+    """
+    Place a new sticky note on the canvas.
+    
+    Args:
+        content: Short text for the idea/sticky note (3-8 words).
+        x: The x coordinate for the sticky note placement.
+        y: The y coordinate for the sticky note placement.
+        reasoning: Reasoning for the idea and its spatial placement.
+        tentative: True if the idea is creative/risky, false if obvious.
+    """
+    pass
+
+def group_ideas(shape_ids: list[str], label: str):
+    """
+    Group existing ideas together under a common label.
+    
+    Args:
+        shape_ids: Array of string IDs of the shapes to group.
+        label: A summarizing label for the group.
+    """
+    pass
+
+# Pass these directly to the `tools` parameter in Gemini SDK
+CANVAS_TOOLS = [place_sticky, group_ideas]
