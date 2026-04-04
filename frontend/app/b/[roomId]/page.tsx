@@ -5,13 +5,12 @@ import CollaborativeTldraw from "@/components/CollaborativeTldraw";
 import { Room } from "@/app/Room";
 import { SignInButton } from "@/components/SignInButton";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
-import { SidebarDashboard } from "@/components/SidebarDashboard";
-import { TLComponents } from "tldraw";
+import { TLComponents, DefaultMainMenu, DefaultMainMenuContent, TldrawUiMenuGroup, TldrawUiMenuItem } from "tldraw";
 import { useBoard } from "@/hooks/useBoard";
+import { useBoardsList } from "@/hooks/useBoardsList";
+import { useRouter } from "next/navigation";
 
-// We create a wrapper to display both the Copy Link button and the Sign In button.
 function TopNavWrapper() {
-  // To get the roomId inside here, we can extract it from the URL since we are on /b/[roomId]
   const roomId = typeof window !== "undefined" ? window.location.pathname.split('/').pop() || "" : "";
   const { board, isOwner, updateAccess } = useBoard(roomId);
 
@@ -45,8 +44,57 @@ function TopNavWrapper() {
   );
 }
 
+// We inject the Your Boards list straight into the Tldraw Native Menu Dropdown
+function CustomMainMenu() {
+  const { boards, user } = useBoardsList();
+  const router = useRouter();
+
+  return (
+    <DefaultMainMenu>
+      {user && (
+        <TldrawUiMenuGroup id="your-boards">
+          <TldrawUiMenuItem
+            id="new-board"
+            label="✨ Create New Board"
+            onSelect={() => router.push("/")}
+            readonlyOk
+          />
+          {boards.slice(0, 5).map((board) => (
+            <div
+              key={board.id}
+              onContextMenu={async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const newTitle = window.prompt("Rename this board:", board.title);
+                if (newTitle && newTitle.trim() !== "" && newTitle !== board.title) {
+                  // Optimistically update the UI by reloading, or just triggering an update
+                  // But we don't have local state mutation easily accessible here, so let's import supabase
+                  const { supabase } = await import('@/lib/supabase');
+                  await supabase.from('boards').update({ title: newTitle.trim() }).eq('id', board.id);
+                  // Refresh page to show new name immediately (simplest approach for now)
+                  window.location.reload();
+                }
+              }}
+            >
+              <TldrawUiMenuItem
+                id={`board-${board.id}`}
+                label={`📄 ${board.title}`}
+                onSelect={() => { window.location.href = `/b/${board.id}`; }}
+                readonlyOk
+              />
+            </div>
+          ))}
+        </TldrawUiMenuGroup>
+      )}
+      {/* Renders standard Tldraw Edit/View/Export menus below your boards */}
+      <DefaultMainMenuContent />
+    </DefaultMainMenu>
+  );
+}
+
 const components: TLComponents = {
   SharePanel: TopNavWrapper,
+  MainMenu: CustomMainMenu,
 };
 
 export default function BoardPage({ params }: { params: Promise<{ roomId: string }> }) {
@@ -56,9 +104,8 @@ export default function BoardPage({ params }: { params: Promise<{ roomId: string
   return (
     <Room roomId={roomId}>
       <div className="flex w-full h-screen bg-[#f9f9f9] overflow-hidden">
-        <SidebarDashboard />
-        <div className="flex-1 relative bg-white border-l border-[#e2e2e2] shadow-sm overflow-hidden">
-          {/* Tldraw wrapper */}
+        {/* We removed the explicit SidebarDashboard component from here */}
+        <div className="flex-1 relative bg-white shadow-sm overflow-hidden">
           <div className="absolute inset-0">
             <CollaborativeTldraw components={components} isReadonly={isReadonly} />
           </div>
