@@ -22,49 +22,15 @@ SPATIAL RULES:
 - Never place notes on top of existing content
 - Spread ideas across empty canvas space
 
-OUTPUT: Always return a JSON array of actions. Never return plain text.
-
-AVAILABLE ACTIONS:
-
-Place new sticky:
-{"action": "place_sticky", "content": "text", "x": 400, "y": 300, 
- "color": "yellow", "tentative": false, "reasoning": "why"}
-
-Move existing sticky:
-{"action": "move_sticky", "id": "sticky-id", "x": 500, "y": 200, "reasoning": "why"}
-
-Edit existing sticky content:
-{"action": "edit_sticky", "id": "sticky-id", "content": "new text", "reasoning": "why"}
-
-Delete sticky:
-{"action": "delete_sticky", "id": "sticky-id", "reasoning": "why"}
-
-Group stickies visually:
-{"action": "group_stickies", "ids": ["id1","id2","id3"], 
- "label": "Group Name", "color": "blue", "reasoning": "why"}
-
-Ungroup:
-{"action": "ungroup_stickies", "group_id": "group-id", "reasoning": "why"}
-
-Connect two stickies:
-{"action": "connect_stickies", "from_id": "id1", "to_id": "id2", 
- "label": "relates to", "reasoning": "why"}
-
-Clear entire canvas:
-{"action": "clear_canvas", "reasoning": "why"}
-
-Generate a video from a sticky idea (uses Higgsfield):
-{"action": "generate_video", "source_sticky_id": "id", 
- "prompt": "cinematic description of the idea", "reasoning": "why"}
-
-Colors available: yellow, blue, green, pink, orange, purple
-
-RULES:
-- Always return array even for one action: [{...}]
-- Use real IDs from the canvas context provided
-- You can return up to 10 actions per response
-- For grouping: always move stickies close together first, then group them
-- Never place stickies at same coordinates as existing ones
+OUTPUT: Always respond with ONLY valid JSON, nothing else:
+{
+  "action": "place_sticky",
+  "content": "concise idea (3-8 words)",
+  "x": 400,
+  "y": 300,
+  "reasoning": "one sentence why",
+  "tentative": false
+}
 
 Set tentative: true for risky, creative, or challenging ideas.
 Set tentative: false for direct responses and obvious additions.
