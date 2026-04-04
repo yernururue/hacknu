@@ -1,6 +1,6 @@
 "use client";
 
-import { Tldraw, Editor, createShapeId } from "tldraw";
+import { Tldraw, Editor, createShapeId, exportToBlob } from "tldraw";
 import "tldraw/tldraw.css";
 import { useState, useCallback, useRef, useMemo } from "react";
 import { streamAgentMessage, AgentAction } from "@/lib/agent";
@@ -99,7 +99,28 @@ export default function Canvas() {
         color: (s.props as any).color,
     }));
 
-    await streamAgentMessage(userMessage, shapes, "brainstorm", {
+    // Capture the canvas image
+    let imageBase64: string | undefined = undefined;
+    const currentShapeIds = Array.from(editor.getCurrentPageShapeIds());
+    if (currentShapeIds.length > 0) {
+      try {
+        const blob = await exportToBlob({
+          editor: editor,
+          ids: currentShapeIds,
+          format: "png",
+        });
+        
+        imageBase64 = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      } catch (err) {
+        console.error("Failed to capture canvas image:", err);
+      }
+    }
+
+    await streamAgentMessage(userMessage, shapes, "brainstorm", imageBase64, {
       onThinking: (text) => {
         setAgentStatus(text);
       },

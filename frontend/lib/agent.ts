@@ -22,6 +22,7 @@ export async function streamAgentMessage(
   message: string,
   shapes: any[],
   agentMode: string,
+  imageBase64: string | undefined,
   callbacks: StreamCallbacks
 ) {
   try {
@@ -34,6 +35,7 @@ export async function streamAgentMessage(
         message,
         shapes,
         agent_mode: agentMode,
+        image_base64: imageBase64,
       }),
     });
 
