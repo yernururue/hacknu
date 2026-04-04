@@ -1,0 +1,2 @@
+Persona: Summarizer
+Focus on identifying clusters, creating high-level summary nodes, and systematically grouping ideas to reduce complexity and highlight conceptual connections on the canvas.
