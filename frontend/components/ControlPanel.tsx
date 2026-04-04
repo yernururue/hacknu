@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState } from "react";
 import type { AgentMode } from "@/lib/agent";
 
 interface ControlPanelProps {
@@ -12,33 +12,125 @@ interface ControlPanelProps {
   isLoading: boolean;
 }
 
-const MODES: { value: AgentMode; label: string; icon: string; desc: string }[] = [
-  {
-    value: "idea_generator",
-    label: "Idea Generator",
-    icon: "💡",
-    desc: "Brainstorm new ideas and concepts",
-  },
-  {
-    value: "devils_advocate",
-    label: "Devil's Advocate",
-    icon: "😈",
-    desc: "Challenge ideas and find weaknesses",
-  },
-  {
-    value: "summarizer",
-    label: "Summarizer",
-    icon: "📋",
-    desc: "Condense and organize existing ideas",
-  },
+const MODES: { value: AgentMode; label: string; icon: string }[] = [
+  { value: "idea_generator", label: "Idea Generator", icon: "💡" },
+  { value: "devils_advocate", label: "Devil's Advocate", icon: "😈" },
+  { value: "summarizer", label: "Summarizer", icon: "📋" },
 ];
 
-/**
- * Sidebar control panel with:
- * - Agent ON / OFF toggle
- * - Mode selector (idea_generator / devils_advocate / summarizer)
- * - "Summarize canvas" button
- */
+// Tldraw-style variables
+const S = {
+  card: {
+    background: "#ffffff",
+    border: "1px solid #e8eaed",
+    borderRadius: 8,
+    boxShadow: "0 2px 8px rgba(0,0,0,0.10)",
+    fontFamily: "'Inter', 'ui-sans-serif', system-ui, sans-serif",
+    overflow: "hidden" as const,
+    userSelect: "none" as const,
+  },
+  header: {
+    background: "#f8f9fa",
+    borderBottom: "1px solid #e8eaed",
+    padding: "8px 10px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  iconBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    border: "1px solid transparent",
+    background: "transparent",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 12,
+    color: "#6b7280",
+    transition: "background 0.1s",
+  },
+  body: {
+    padding: "8px 10px",
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: 6,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: "#6b7280",
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.06em",
+  },
+  modeBtn: (selected: boolean, disabled: boolean) => ({
+    display: "flex",
+    alignItems: "center",
+    gap: 7,
+    width: "100%",
+    padding: "6px 8px",
+    borderRadius: 6,
+    border: selected ? "1px solid #c7d2fe" : "1px solid transparent",
+    background: selected ? "#eef2ff" : "transparent",
+    cursor: disabled ? "default" : "pointer",
+    opacity: disabled ? 0.45 : 1,
+    transition: "background 0.1s, border 0.1s",
+    textAlign: "left" as const,
+  }),
+  modeLabel: (selected: boolean) => ({
+    fontSize: 12,
+    fontWeight: selected ? 600 : 500,
+    color: selected ? "#4338ca" : "#374151",
+    lineHeight: 1,
+  }),
+  divider: {
+    height: 1,
+    background: "#e8eaed",
+    margin: "2px 0",
+  },
+  summarizeBtn: (disabled: boolean) => ({
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    width: "100%",
+    padding: "7px 10px",
+    borderRadius: 6,
+    border: "1px solid " + (disabled ? "#e8eaed" : "#d1fae5"),
+    background: disabled ? "#f3f4f6" : "#f0fdf4",
+    color: disabled ? "#9ca3af" : "#065f46",
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: disabled ? "default" : "pointer",
+    transition: "all 0.1s",
+  }),
+  toggle: (enabled: boolean) => ({
+    position: "relative" as const,
+    width: 34,
+    height: 18,
+    borderRadius: 9,
+    border: "none",
+    background: enabled ? "#4f46e5" : "#d1d5db",
+    cursor: "pointer",
+    padding: 0,
+    flexShrink: 0,
+    transition: "background 0.2s",
+  }),
+  thumb: (enabled: boolean) => ({
+    position: "absolute" as const,
+    top: 2,
+    left: enabled ? 16 : 2,
+    width: 14,
+    height: 14,
+    borderRadius: "50%",
+    background: "white",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+    transition: "left 0.2s",
+  }),
+};
+
 export default function ControlPanel({
   agentEnabled,
   onToggleAgent,
@@ -49,361 +141,177 @@ export default function ControlPanel({
 }: ControlPanelProps) {
   const [isOpen, setIsOpen] = useState(true);
 
-  return (
-    <>
-      {/* Toggle button when collapsed */}
-      {!isOpen && (
-        <button
-          onClick={() => setIsOpen(true)}
-          style={{
-            position: "absolute",
-            top: 16,
-            right: 16,
-            zIndex: 3500,
-            width: 44,
-            height: 44,
-            borderRadius: 14,
-            border: "1px solid rgba(226, 232, 240, 0.8)",
-            background: "rgba(255, 255, 255, 0.82)",
-            backdropFilter: "blur(16px)",
-            WebkitBackdropFilter: "blur(16px)",
-            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.08)",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 18,
-            transition: "all 0.15s ease",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.transform = "scale(1.05)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.transform = "scale(1)";
-          }}
-        >
-          🤖
-        </button>
-      )}
-
-      {/* Panel */}
-      <div
+  // Collapsed: icon button sitting just to the RIGHT of the centered Tldraw toolbar
+  if (!isOpen) {
+    return (
+      <button
+        title="Open AI Agent"
+        onClick={() => setIsOpen(true)}
         style={{
           position: "absolute",
-          top: 16,
-          right: 16,
+          bottom: 8,
+          left: "calc(50% - 298px)", // just outside the toolbar's left edge
           zIndex: 3500,
-          width: 280,
-          background: "rgba(255, 255, 255, 0.82)",
-          backdropFilter: "blur(24px) saturate(180%)",
-          WebkitBackdropFilter: "blur(24px) saturate(180%)",
-          border: "1px solid rgba(226, 232, 240, 0.8)",
-          borderRadius: 20,
-          boxShadow:
-            "0 24px 48px rgba(0, 0, 0, 0.08), 0 8px 16px rgba(0, 0, 0, 0.04)",
+          width: 40,
+          height: 40,
+          borderRadius: 12,     // matches toolbar border-radius
+          border: "1px solid #e2e5e9",
+          background: "#ffffff",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
           overflow: "hidden",
-          transform: isOpen ? "translateX(0)" : "translateX(320px)",
-          opacity: isOpen ? 1 : 0,
-          transition: "transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease",
-          pointerEvents: isOpen ? "auto" : "none",
         }}
       >
-        {/* Header */}
-        <div
-          style={{
-            background: "linear-gradient(135deg, #3b82f6, #6366f1)",
-            padding: "14px 18px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 10,
-                background: "rgba(255, 255, 255, 0.2)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 14,
-              }}
-            >
-              🤖
-            </div>
-            <div>
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: "white",
-                  letterSpacing: "0.02em",
-                }}
-              >
-                AI Agent
-              </div>
-              <div
-                style={{
-                  fontSize: 10,
-                  fontWeight: 500,
-                  color: "rgba(255, 255, 255, 0.7)",
-                  marginTop: 1,
-                }}
-              >
-                {agentEnabled ? "Active" : "Disabled"}
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={() => setIsOpen(false)}
+        <img
+          src="/goose.png"
+          alt="AI Agent"
+          style={{ width: 30, height: 30, objectFit: "cover", borderRadius: 8 }}
+        />
+      </button>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        bottom: 56,
+        left: "calc(50% - 298px)",  // same anchor as collapsed button
+        transform: "translateX(-100%) translateX(40px)", // panel right-aligns near button
+        zIndex: 3500,
+        width: 232,
+        ...S.card,
+      }}
+    >
+      {/* Header — mimics Tldraw panel headers */}
+      <div style={S.header}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* Goose avatar */}
+          <div
             style={{
               width: 28,
               height: 28,
               borderRadius: 8,
-              border: "none",
-              background: "rgba(255, 255, 255, 0.15)",
-              color: "white",
-              fontSize: 14,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "background 0.15s",
+              overflow: "hidden",
+              border: "1px solid #e8eaed",
+              flexShrink: 0,
+              background: "#f8f9fa",
             }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.background =
-                "rgba(255, 255, 255, 0.25)";
+          >
+            <img
+              src="/goose.png"
+              alt="AI"
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          </div>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#1f2937", letterSpacing: "0.01em" }}>
+            AI Agent
+          </span>
+          {/* Active indicator dot */}
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: agentEnabled ? "#22c55e" : "#d1d5db",
+              display: "inline-block",
+              transition: "background 0.2s",
             }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.background =
-                "rgba(255, 255, 255, 0.15)";
-            }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: 2 }}>
+          {/* Enable/disable toggle */}
+          <button
+            style={S.toggle(agentEnabled)}
+            onClick={() => onToggleAgent(!agentEnabled)}
+            title={agentEnabled ? "Disable agent" : "Enable agent"}
+          >
+            <div style={S.thumb(agentEnabled)} />
+          </button>
+          {/* Collapse button */}
+          <button
+            style={S.iconBtn}
+            onClick={() => setIsOpen(false)}
+            title="Collapse"
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#f3f4f6"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
           >
             ✕
           </button>
         </div>
-
-        {/* Body */}
-        <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 18 }}>
-          {/* Toggle */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: "#334155",
-                }}
-              >
-                Agent Power
-              </div>
-              <div
-                style={{
-                  fontSize: 10,
-                  color: "#94a3b8",
-                  marginTop: 2,
-                }}
-              >
-                {agentEnabled ? "Ready to assist" : "Turn on to get AI help"}
-              </div>
-            </div>
-            <button
-              onClick={() => onToggleAgent(!agentEnabled)}
-              style={{
-                position: "relative",
-                width: 48,
-                height: 26,
-                borderRadius: 13,
-                border: "none",
-                background: agentEnabled
-                  ? "linear-gradient(135deg, #22c55e, #16a34a)"
-                  : "#cbd5e1",
-                cursor: "pointer",
-                transition: "background 0.25s ease",
-                padding: 0,
-              }}
-            >
-              <div
-                style={{
-                  position: "absolute",
-                  top: 3,
-                  left: agentEnabled ? 25 : 3,
-                  width: 20,
-                  height: 20,
-                  borderRadius: "50%",
-                  background: "white",
-                  boxShadow: "0 2px 6px rgba(0, 0, 0, 0.15)",
-                  transition: "left 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
-                }}
-              />
-            </button>
-          </div>
-
-          {/* Divider */}
-          <div
-            style={{
-              height: 1,
-              background: "linear-gradient(to right, transparent, #e2e8f0, transparent)",
-            }}
-          />
-
-          {/* Mode Selector */}
-          <div>
-            <div
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                color: "#94a3b8",
-                textTransform: "uppercase",
-                letterSpacing: "0.1em",
-                marginBottom: 10,
-              }}
-            >
-              Agent Mode
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {MODES.map((mode) => {
-                const isSelected = agentMode === mode.value;
-                return (
-                  <button
-                    key={mode.value}
-                    onClick={() => onChangeMode(mode.value)}
-                    disabled={!agentEnabled}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      padding: "10px 12px",
-                      borderRadius: 12,
-                      border: isSelected
-                        ? "1px solid rgba(99, 102, 241, 0.3)"
-                        : "1px solid transparent",
-                      background: isSelected
-                        ? "rgba(99, 102, 241, 0.08)"
-                        : "transparent",
-                      cursor: agentEnabled ? "pointer" : "not-allowed",
-                      opacity: agentEnabled ? 1 : 0.5,
-                      transition: "all 0.15s ease",
-                      textAlign: "left",
-                      width: "100%",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isSelected && agentEnabled) {
-                        (e.currentTarget as HTMLElement).style.background =
-                          "rgba(248, 250, 252, 0.8)";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isSelected) {
-                        (e.currentTarget as HTMLElement).style.background =
-                          "transparent";
-                      }
-                    }}
-                  >
-                    <span style={{ fontSize: 18 }}>{mode.icon}</span>
-                    <div>
-                      <div
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: isSelected ? "#4f46e5" : "#334155",
-                        }}
-                      >
-                        {mode.label}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 10,
-                          color: "#94a3b8",
-                          marginTop: 1,
-                        }}
-                      >
-                        {mode.desc}
-                      </div>
-                    </div>
-                    {isSelected && (
-                      <div
-                        style={{
-                          marginLeft: "auto",
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          background: "#6366f1",
-                          boxShadow: "0 0 0 3px rgba(99, 102, 241, 0.15)",
-                        }}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div
-            style={{
-              height: 1,
-              background: "linear-gradient(to right, transparent, #e2e8f0, transparent)",
-            }}
-          />
-
-          {/* Summarize button */}
-          <button
-            onClick={onSummarize}
-            disabled={!agentEnabled || isLoading}
-            style={{
-              width: "100%",
-              padding: "12px 16px",
-              borderRadius: 14,
-              border: "none",
-              background:
-                !agentEnabled || isLoading
-                  ? "#e2e8f0"
-                  : "linear-gradient(135deg, #f59e0b, #d97706)",
-              color:
-                !agentEnabled || isLoading ? "#94a3b8" : "white",
-              fontSize: 12,
-              fontWeight: 700,
-              cursor:
-                !agentEnabled || isLoading ? "not-allowed" : "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              boxShadow:
-                !agentEnabled || isLoading
-                  ? "none"
-                  : "0 4px 12px rgba(245, 158, 11, 0.3)",
-              transition: "all 0.15s ease",
-            }}
-            onMouseEnter={(e) => {
-              if (agentEnabled && !isLoading) {
-                (e.currentTarget as HTMLElement).style.boxShadow =
-                  "0 8px 24px rgba(245, 158, 11, 0.35)";
-                (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)";
-              }
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.boxShadow =
-                agentEnabled && !isLoading
-                  ? "0 4px 12px rgba(245, 158, 11, 0.3)"
-                  : "none";
-              (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
-            }}
-          >
-            <span style={{ fontSize: 16 }}>📋</span>
-            {isLoading ? "Summarizing…" : "Summarize Canvas"}
-          </button>
-        </div>
       </div>
-    </>
+
+      {/* Body */}
+      <div style={S.body}>
+        {/* Mode label */}
+        <div style={S.label}>Mode</div>
+
+        {/* Mode buttons */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          {MODES.map((mode) => {
+            const selected = agentMode === mode.value;
+            const disabled = !agentEnabled;
+            return (
+              <button
+                key={mode.value}
+                onClick={() => !disabled && onChangeMode(mode.value)}
+                style={S.modeBtn(selected, disabled)}
+                onMouseEnter={(e) => {
+                  if (!selected && !disabled) {
+                    (e.currentTarget as HTMLElement).style.background = "#f3f4f6";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!selected) {
+                    (e.currentTarget as HTMLElement).style.background = selected ? "#eef2ff" : "transparent";
+                  }
+                }}
+              >
+                <span style={{ fontSize: 14, lineHeight: 1, flexShrink: 0 }}>{mode.icon}</span>
+                <span style={S.modeLabel(selected)}>{mode.label}</span>
+                {selected && (
+                  <div
+                    style={{
+                      marginLeft: "auto",
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      background: "#4f46e5",
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={S.divider} />
+
+        {/* Summarize */}
+        <button
+          onClick={onSummarize}
+          disabled={!agentEnabled || isLoading}
+          style={S.summarizeBtn(!agentEnabled || isLoading)}
+          onMouseEnter={(e) => {
+            if (agentEnabled && !isLoading) {
+              (e.currentTarget as HTMLElement).style.background = "#dcfce7";
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (agentEnabled && !isLoading) {
+              (e.currentTarget as HTMLElement).style.background = "#f0fdf4";
+            }
+          }}
+        >
+          <span style={{ fontSize: 13 }}>📋</span>
+          {isLoading ? "Summarizing…" : "Summarize Canvas"}
+        </button>
+      </div>
+    </div>
   );
 }

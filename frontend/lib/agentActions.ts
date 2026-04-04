@@ -41,6 +41,10 @@ export function registerEditor(editor: Editor | null) {
   _editor = editor;
 }
 
+export function getEditor() {
+  return _editor;
+}
+
 // --- Agent shape placement ---
 
 export function placeAgentShape(action: AgentAction): void {

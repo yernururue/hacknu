@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useState, useCallback } from "react";
 import CollaborativeTldraw from "@/components/CollaborativeTldraw";
 import { Room } from "@/app/Room";
 import { SignInButton } from "@/components/SignInButton";
@@ -9,6 +9,10 @@ import { TLComponents, DefaultMainMenu, DefaultMainMenuContent, TldrawUiMenuGrou
 import { useBoard } from "@/hooks/useBoard";
 import { useBoardsList } from "@/hooks/useBoardsList";
 import { useRouter } from "next/navigation";
+import ChatInput from "@/components/ChatInput";
+import ControlPanel from "@/components/ControlPanel";
+import { AgentMode, sendToAgent, extractCanvasShapes } from "@/lib/agent";
+import { getEditor, placeAgentShape } from "@/lib/agentActions";
 
 function TopNavWrapper() {
   const roomId = typeof window !== "undefined" ? window.location.pathname.split('/').pop() || "" : "";
@@ -67,11 +71,8 @@ function CustomMainMenu() {
                 e.stopPropagation();
                 const newTitle = window.prompt("Rename this board:", board.title);
                 if (newTitle && newTitle.trim() !== "" && newTitle !== board.title) {
-                  // Optimistically update the UI by reloading, or just triggering an update
-                  // But we don't have local state mutation easily accessible here, so let's import supabase
                   const { supabase } = await import('@/lib/supabase');
                   await supabase.from('boards').update({ title: newTitle.trim() }).eq('id', board.id);
-                  // Refresh page to show new name immediately (simplest approach for now)
                   window.location.reload();
                 }
               }}
@@ -86,7 +87,6 @@ function CustomMainMenu() {
           ))}
         </TldrawUiMenuGroup>
       )}
-      {/* Renders standard Tldraw Edit/View/Export menus below your boards */}
       <DefaultMainMenuContent />
     </DefaultMainMenu>
   );
@@ -100,14 +100,71 @@ const components: TLComponents = {
 export default function BoardPage({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = use(params);
   const { isReadonly } = useBoard(roomId);
+  
+  // Agent states
+  const [agentEnabled, setAgentEnabled] = useState(true);
+  const [agentMode, setAgentMode] = useState<AgentMode>("idea_generator");
+  const [summarizeLoading, setSummarizeLoading] = useState(false);
+
+  // Agent summarizing action
+  const handleSummarize = useCallback(async () => {
+    if (!agentEnabled || summarizeLoading) return;
+
+    const editor = getEditor();
+    if (!editor) return;
+
+    const shapes = extractCanvasShapes(editor);
+    setSummarizeLoading(true);
+
+    try {
+      const actions = await sendToAgent(
+        "Summarize all ideas into key themes",
+        shapes,
+        "summarizer",
+        roomId // use current room as session id 
+      );
+      for (const action of actions) {
+        placeAgentShape({
+          type: "sticky-note",
+          x: action.x,
+          y: action.y,
+          text: action.content,
+          label: action.tentative ? "❓ Suggestion" : "🤖 Agent",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to summarize:", error);
+    } finally {
+      setSummarizeLoading(false);
+    }
+  }, [agentEnabled, summarizeLoading, roomId]);
 
   return (
     <Room roomId={roomId}>
-      <div className="flex w-full h-screen bg-[#f9f9f9] overflow-hidden">
-        {/* We removed the explicit SidebarDashboard component from here */}
+      <div className="flex w-full h-screen bg-[#f9f9f9] overflow-hidden relative">
         <div className="flex-1 relative bg-white shadow-sm overflow-hidden">
           <div className="absolute inset-0">
             <CollaborativeTldraw components={components} isReadonly={isReadonly} />
+          </div>
+          
+          {/* AI Controls Overlay */}
+          <div style={{ position: "absolute", zIndex: 1000, pointerEvents: "none", inset: 0 }}>
+            {/* We re-enable pointer events for the actual children */}
+            <div style={{ pointerEvents: "auto" }}>
+              <ControlPanel
+                agentEnabled={agentEnabled}
+                onToggleAgent={setAgentEnabled}
+                agentMode={agentMode}
+                onChangeMode={setAgentMode}
+                onSummarize={handleSummarize}
+                isLoading={summarizeLoading}
+              />
+              <ChatInput
+                agentEnabled={agentEnabled}
+                agentMode={agentMode}
+                sessionId={roomId}
+              />
+            </div>
           </div>
         </div>
       </div>

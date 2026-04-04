@@ -1,18 +1,16 @@
 "use client";
 
 import React, { useState, useCallback, useRef } from "react";
-import { sendToAgent, AgentMode, DEFAULT_SESSION_ID } from "@/lib/agent";
-import type { CanvasFullHandle } from "@/components/Canvas";
+import { sendToAgent, AgentMode, DEFAULT_SESSION_ID, extractCanvasShapes } from "@/lib/agent";
+import { placeAgentShape, getEditor } from "@/lib/agentActions";
 
 interface ChatInputProps {
-  canvasRef: React.RefObject<CanvasFullHandle | null>;
   agentMode: AgentMode;
   agentEnabled: boolean;
   sessionId?: string;
 }
 
 export default function ChatInput({
-  canvasRef,
   agentMode,
   agentEnabled,
   sessionId = DEFAULT_SESSION_ID,
@@ -26,10 +24,13 @@ export default function ChatInput({
     const trimmed = input.trim();
     if (!trimmed || isLoading || !agentEnabled) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const editor = getEditor();
+    if (!editor) {
+      setStatusText("Editor not ready");
+      return;
+    }
 
-    const shapes = canvas.getShapesForBackend();
+    const shapes = extractCanvasShapes(editor);
     setInput("");
     setIsLoading(true);
     setStatusText("Connecting…");
@@ -39,11 +40,14 @@ export default function ChatInput({
       const actions = await sendToAgent(trimmed, shapes, agentMode, sessionId);
       setStatusText("Processing…");
       for (const action of actions) {
-        if (action.tentative) {
-          canvas.addSuggestion(action);
-        } else {
-          canvas.placeAgentShape(action);
-        }
+        // Map the backend API response to what agentActions expects
+        placeAgentShape({
+          type: "sticky-note",
+          x: action.x,
+          y: action.y,
+          text: action.content,
+          label: action.tentative ? "❓ Suggestion" : "🤖 Agent",
+        });
       }
     } catch (error) {
       streamFailed = true;
@@ -55,7 +59,7 @@ export default function ChatInput({
         setStatusText("");
       }
     }
-  }, [input, isLoading, agentEnabled, canvasRef, agentMode, sessionId]);
+  }, [input, isLoading, agentEnabled, agentMode, sessionId]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -75,40 +79,60 @@ export default function ChatInput({
     <div
       style={{
         position: "absolute",
-        bottom: 28,
+        bottom: 64,           // sits just above the Tldraw toolbar, matching its gap
         left: "50%",
         transform: "translateX(-50%)",
-        width: "100%",
-        maxWidth: 600,
-        padding: "0 16px",
+        width: "fit-content",  // matches toolbar's auto width behavior
+        minWidth: 440,
+        maxWidth: 520,
+        padding: 0,
         zIndex: 3000,
+        fontFamily: "'Inter', 'ui-sans-serif', system-ui, sans-serif",
       }}
     >
+      {/* Status text above input */}
+      {statusText && (
+        <div
+          style={{
+            textAlign: "center",
+            marginBottom: 5,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: statusText.startsWith("Error") ? "#dc2626" : "#6b7280",
+            }}
+          >
+            {isLoading ? `● ${statusText}` : statusText}
+          </span>
+        </div>
+      )}
+
+      {/* Input bar — matches Tldraw toolbar shape */}
       <div
         style={{
-          background: "rgba(255, 255, 255, 0.82)",
-          backdropFilter: "blur(24px) saturate(180%)",
-          WebkitBackdropFilter: "blur(24px) saturate(180%)",
-          border: "1px solid rgba(226, 232, 240, 0.8)",
-          borderRadius: 18,
-          padding: 6,
+          background: "#ffffff",
+          border: "1px solid #e2e5e9",
+          borderRadius: 12,        // same radius as Tldraw toolbar
+          padding: "5px 5px 5px 14px",
           display: "flex",
           alignItems: "center",
-          gap: 8,
-          boxShadow:
-            "0 20px 40px rgba(0, 0, 0, 0.08), 0 8px 16px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.02)",
-          transition: "box-shadow 0.2s ease",
+          gap: 6,
+          boxShadow: "0 2px 6px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)", // same shadow as toolbar
         }}
       >
+
         <input
           ref={inputRef}
           type="text"
           value={input}
           onChange={(e) => {
             setInput(e.target.value);
-            if (statusText.startsWith("Error")) {
-              setStatusText("");
-            }
+            if (statusText.startsWith("Error")) setStatusText("");
           }}
           onKeyDown={handleKeyDown}
           placeholder="Ask AI to brainstorm, group, or organize…"
@@ -118,37 +142,45 @@ export default function ChatInput({
             background: "transparent",
             border: "none",
             outline: "none",
-            padding: "10px 14px",
-            fontSize: 14,
-            color: "#1e293b",
-            fontWeight: 500,
-            letterSpacing: "0.01em",
+            padding: "7px 6px",
+            fontSize: 13,
+            color: "#111827",
+            fontWeight: 400,
+            fontFamily: "inherit",
           }}
         />
+
+        {/* Send button */}
         <button
           type="button"
           onClick={() => void handleSend()}
           disabled={isLoading || !input.trim()}
           style={{
-            padding: "10px 20px",
-            borderRadius: 14,
+            padding: "7px 16px",
+            borderRadius: 9,       // slightly inset from outer 12px radius
             border: "none",
-            background:
-              isLoading || !input.trim()
-                ? "#cbd5e1"
-                : "linear-gradient(135deg, #3b82f6, #6366f1)",
-            color: "white",
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: isLoading || !input.trim() ? "not-allowed" : "pointer",
-            transition: "all 0.15s ease",
-            boxShadow:
-              isLoading || !input.trim()
-                ? "none"
-                : "0 4px 12px rgba(59, 130, 246, 0.3)",
+            background: isLoading || !input.trim() ? "#f3f4f6" : "#4f46e5",
+            color: isLoading || !input.trim() ? "#9ca3af" : "#ffffff",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: isLoading || !input.trim() ? "default" : "pointer",
+            transition: "background 0.15s",
             display: "flex",
             alignItems: "center",
-            gap: 6,
+            gap: 5,
+            flexShrink: 0,
+            fontFamily: "inherit",
+            letterSpacing: "0.01em",
+          }}
+          onMouseEnter={(e) => {
+            if (!isLoading && input.trim()) {
+              (e.currentTarget as HTMLElement).style.background = "#4338ca";
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isLoading && input.trim()) {
+              (e.currentTarget as HTMLElement).style.background = "#4f46e5";
+            }
           }}
         >
           {isLoading ? (
@@ -156,48 +188,21 @@ export default function ChatInput({
               <span
                 style={{
                   display: "inline-block",
-                  width: 14,
-                  height: 14,
-                  border: "2px solid rgba(255,255,255,0.3)",
-                  borderTopColor: "white",
+                  width: 12,
+                  height: 12,
+                  border: "2px solid rgba(156,163,175,0.4)",
+                  borderTopColor: "#9ca3af",
                   borderRadius: "50%",
                   animation: "spin 0.6s linear infinite",
                 }}
               />
-              Thinking…
+              Working
             </>
           ) : (
-            <>
-              <span style={{ fontSize: 14 }}>⚡</span>
-              Send
-            </>
+            <>Send</>
           )}
         </button>
       </div>
-
-      {statusText ? (
-        <div
-          style={{
-            marginTop: 8,
-            textAlign: "center",
-          }}
-        >
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-              color: statusText.startsWith("Error") ? "#ef4444" : "#94a3b8",
-              animation: isLoading
-                ? "pulse 2s ease-in-out infinite"
-                : undefined,
-            }}
-          >
-            {isLoading ? `Agent Stream Active • ${statusText}` : statusText}
-          </span>
-        </div>
-      ) : null}
     </div>
   );
 }
