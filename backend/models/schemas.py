@@ -14,6 +14,7 @@ class CanvasShape(BaseModel):
 class AgentMessageRequest(BaseModel):
     message: str = Field(..., description="The user's message to the agent")
     shapes: List[CanvasShape] = Field(default_factory=list, description="Current state of the canvas")
+    agent_mode: str = Field(default="brainstorm", description="The current mode of the agent")
 
 class AgentAction(BaseModel):
     action: str = Field(..., description="Action type: place_sticky, update_shape, delete_shape")

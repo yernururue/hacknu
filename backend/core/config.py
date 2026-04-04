@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     ANTHROPIC_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
     
     DEBUG: bool = True
     PORT: int = 8000
