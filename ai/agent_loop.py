@@ -19,10 +19,11 @@ class Action(BaseModel):
 class CanvasResponse(BaseModel):
     actions: list[Action] = Field(description="List of actions to take on the canvas")
 
-def run_agent(canvas_context: str, user_message: str, persona_text: str, system_prompt: str) -> dict:
+def run_agent(canvas_context: str, user_message: str, persona_text: str, system_prompt: str, image_bytes: bytes = None) -> dict:
     """
     Executes the agent loop by calling Gemini using native Structured Outputs.
     Guarantees a clean dictionary return natively without fallback text strings.
+    Supports multimodal vision input using an optional image_bytes attribute.
     """
     gemini_api_key = os.environ.get("GEMINI_API_KEY")
     if not gemini_api_key:
@@ -33,13 +34,18 @@ def run_agent(canvas_context: str, user_message: str, persona_text: str, system_
     
     # Structure prompts
     full_system_prompt = f"{system_prompt}\n\nPersona Instructions:\n{persona_text}"
-    prompt = f"<canvas_context>\n{canvas_context}\n</canvas_context>\n\nRequest: {user_message}"
+    text_prompt = f"<canvas_context>\n{canvas_context}\n</canvas_context>\n\nRequest: {user_message}"
+    
+    # 2. Package text and images concurrently into parts array
+    contents = [text_prompt]
+    if image_bytes is not None:
+        contents.append(types.Part.from_bytes(data=image_bytes, mime_type="image/png"))
 
     try:
-        # 2. Enforce strict JSON output matching Pydantic class
+        # 3. Enforce strict JSON output matching Pydantic class
         response = client.models.generate_content(
             model="gemini-2.5-flash",
-            contents=prompt,
+            contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=full_system_prompt,
                 response_mime_type="application/json",
@@ -48,7 +54,7 @@ def run_agent(canvas_context: str, user_message: str, persona_text: str, system_
             )
         )
 
-        # 3. Model returns the fully parsed Pydantic object, return as native dict
+        # 4. Model returns the fully parsed Pydantic object, return as native dict
         if response.parsed:
             return response.parsed.model_dump()
         else:
