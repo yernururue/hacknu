@@ -116,6 +116,26 @@ function parseSseEventBlock(block: string): { event: string; data: string } | nu
  * POSTs to the agent SSE endpoint, reads the stream, and returns all parsed `action` payloads.
  * @param audioData - Optional full data URI (`data:audio/webm;base64,...`) for voice input.
  */
+/**
+ * Capture the current page as a PNG data URL for multimodal analysis (Analyze screen).
+ */
+export async function captureCanvasScreenshot(editor: Editor): Promise<string | undefined> {
+  const ids = [...editor.getCurrentPageShapeIds()];
+  if (ids.length === 0) return undefined;
+  try {
+    const { url } = await editor.toImageDataUrl(ids, {
+      format: "png",
+      scale: 0.45,
+      background: true,
+      padding: 16,
+    });
+    return url;
+  } catch (e) {
+    console.warn("[captureCanvasScreenshot]", e);
+    return undefined;
+  }
+}
+
 export async function sendToAgent(
   message: string,
   canvasShapes: CanvasShapePayload[],

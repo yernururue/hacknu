@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { sendToAgent, AgentMode, DEFAULT_SESSION_ID, extractCanvasShapes } from "@/lib/agent";
-import { applyBackendAgentAction, getEditor } from "@/lib/agentActions";
+import { applyBackendAgentAction, getEditor, runHiggsfieldFromPrompt } from "@/lib/agentActions";
 
 interface ChatInputProps {
   agentMode: AgentMode;
@@ -27,6 +27,7 @@ export default function ChatInput({
   const [showTools, setShowTools] = useState(false);
   const [statusText, setStatusText] = useState("");
   const [generationModalType, setGenerationModalType] = useState<"video" | "image" | null>(null);
+  const [generationPrompt, setGenerationPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState("default");
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -595,7 +596,12 @@ export default function ChatInput({
                   Analyze Screen
                 </button>
                 <button
-                  onClick={() => { setGenerationModalType("video"); setShowTools(false); setSelectedModel("default"); }}
+                  onClick={() => {
+                    setGenerationModalType("video");
+                    setGenerationPrompt("");
+                    setShowTools(false);
+                    setSelectedModel("default");
+                  }}
                   style={{
                     display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px",
                     background: "transparent", border: "none", borderRadius: 6,
@@ -612,7 +618,12 @@ export default function ChatInput({
                   Generate Video
                 </button>
                 <button
-                  onClick={() => { setGenerationModalType("image"); setShowTools(false); setSelectedModel("default"); }}
+                  onClick={() => {
+                    setGenerationModalType("image");
+                    setGenerationPrompt("");
+                    setShowTools(false);
+                    setSelectedModel("default");
+                  }}
                   style={{
                     display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px",
                     background: "transparent", border: "none", borderRadius: 6,
@@ -651,11 +662,31 @@ export default function ChatInput({
             Generate {generationModalType === "video" ? "Video" : "Image"}
           </h3>
           <p style={{ margin: 0, fontSize: 14, color: "#4b5563" }}>
-            Select a model to use for {generationModalType === "video" ? "video" : "image"} generation.
+            Describe what to generate. We use Groq for the cinematic prompt, then Higgsfield for{" "}
+            {generationModalType === "video" ? "image + video" : "image only"}.
           </p>
-          
+
+          <label style={{ fontSize: 13, fontWeight: 500, color: "#374151" }}>Prompt</label>
+          <textarea
+            value={generationPrompt}
+            onChange={(e) => setGenerationPrompt(e.target.value)}
+            placeholder="e.g. A neon city at dusk, rain on wet streets, cinematic wide shot"
+            rows={4}
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              borderRadius: 8,
+              border: "1px solid #d1d5db",
+              fontSize: 14,
+              fontFamily: "inherit",
+              resize: "vertical",
+              outline: "none",
+              color: "#111827",
+            }}
+          />
+
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <label style={{ fontSize: 13, fontWeight: 500, color: "#374151" }}>Available Models (from API)</label>
+            <label style={{ fontSize: 13, fontWeight: 500, color: "#374151" }}>Quality preset</label>
             <select
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
@@ -665,14 +696,21 @@ export default function ChatInput({
                 outline: "none", color: "#111827"
               }}
             >
-              <option value="default">{generationModalType === "video" ? "Higgsfield Video Model" : "Midjourney (via Agent)"}</option>
-              <option value="dalle3">{generationModalType === "image" ? "DALL-E 3" : "Sora (coming soon)"}</option>
+              <option value="default">
+                {generationModalType === "video" ? "Higgsfield (flux + DoP turbo)" : "Higgsfield flux image"}
+              </option>
+              <option value="dalle3" disabled>
+                Other providers (coming soon)
+              </option>
             </select>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, marginTop: 8 }}>
             <button
-              onClick={() => setGenerationModalType(null)}
+              onClick={() => {
+                setGenerationModalType(null);
+                setGenerationPrompt("");
+              }}
               style={{
                 background: "transparent", border: "none", fontSize: 14, fontWeight: 500,
                 color: "#6b7280", padding: "8px 16px", cursor: "pointer", borderRadius: 8,
@@ -682,12 +720,15 @@ export default function ChatInput({
             </button>
             <button
               onClick={() => {
-                alert(`Triggering ${generationModalType} generation with model: ${selectedModel}`);
+                const mode = generationModalType === "image" ? "image" : "video";
+                runHiggsfieldFromPrompt(generationPrompt, mode);
                 setGenerationModalType(null);
+                setGenerationPrompt("");
               }}
+              disabled={!generationPrompt.trim()}
               style={{
-                background: "#111827", border: "none", fontSize: 14, fontWeight: 500,
-                color: "#fff", padding: "8px 16px", cursor: "pointer", borderRadius: 8,
+                background: !generationPrompt.trim() ? "#d1d5db" : "#111827", border: "none", fontSize: 14, fontWeight: 500,
+                color: "#fff", padding: "8px 16px", cursor: !generationPrompt.trim() ? "default" : "pointer", borderRadius: 8,
                 boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
               }}
             >

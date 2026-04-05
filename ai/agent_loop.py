@@ -1,14 +1,13 @@
 """
 agent_loop.py
-Core AI agent: loads prompts, calls Gemini, parses response into action dicts.
+Core AI agent: loads prompts, calls Groq (text) or Gemini (screenshot/voice), parses actions.
 """
 
 import json
 from pathlib import Path
 from typing import Optional
 
-from backend.models.schemas import FALLBACK_ACTION, CanvasShape
-from backend.services.gemini_service import call_gemini
+from backend.models.schemas import CanvasShape
 
 # Resolve paths relative to THIS file so they work regardless of cwd
 _PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
@@ -57,27 +56,57 @@ def _load_system_prompt(agent_mode: str) -> str:
 
 def _parse_actions(raw: str) -> list[dict]:
     """
-    Parse the raw Gemini response into a list of action dicts.
+    Parse the raw model response into a list of action dicts.
     Handles both a JSON array and a legacy single object (wrapped as one-element list).
-    Falls back to FALLBACK_ACTION on any parse error or empty result.
     """
     clean = raw.strip()
     if clean.startswith("```"):
-        lines = clean.split("\n")
-        lines = [l for l in lines if not l.strip().startswith("```")]
-        clean = "\n".join(lines).strip()
-    raw = clean
+        clean = clean.split("```")[1]
+        if clean.startswith("json"):
+            clean = clean[4:]
+    clean = clean.strip()
+
+    _fallback = {
+        "action": "place_sticky",
+        "content": "I had trouble processing that",
+        "x": 400,
+        "y": 400,
+        "reasoning": "fallback due to parse error",
+        "tentative": False,
+    }
 
     try:
-        data = json.loads(raw)
+        data = json.loads(clean)
         if isinstance(data, dict):
             data = [data]
         if not isinstance(data, list):
-            return [FALLBACK_ACTION.model_dump()]
+            print(f"_parse_actions failed: expected list or dict, got {type(data).__name__}")
+            return [_fallback]
         actions = [item for item in data if isinstance(item, dict)]
-        return actions if actions else [FALLBACK_ACTION.model_dump()]
-    except Exception:
-        return [FALLBACK_ACTION.model_dump()]
+        if not actions:
+            print(f"_parse_actions failed: no dict actions in list, raw snippet: {repr(clean[:200])}")
+            return [_fallback]
+        return actions
+    except Exception as e:
+        print(f"_parse_actions failed on: {repr(clean[:200])}")
+        print(f"Error: {e}")
+        return [_fallback]
+
+
+def _call_llm(
+    full_prompt: str,
+    image_data: Optional[str],
+    audio_data: Optional[str],
+) -> str:
+    """Text-only: Groq. Screenshot or voice: Gemini multimodal."""
+    if image_data or audio_data:
+        from backend.services.gemini_service import call_gemini
+
+        return call_gemini(full_prompt, image_data=image_data, audio_data=audio_data)
+
+    from backend.services.groq_service import call_groq
+
+    return call_groq(full_prompt)
 
 
 def run_agent(
@@ -92,21 +121,38 @@ def run_agent(
 
     1. Loads and assembles the system prompt with the chosen persona.
     2. Builds a user prompt combining the canvas state and user message.
-    3. Calls Gemini.
+    3. Calls Groq (text) or Gemini (screenshot / voice).
     4. Parses the response into action dicts (flexible JSON for the frontend).
 
     Returns a list of dicts (always at least one — the fallback).
     """
     system_prompt = _load_system_prompt(agent_mode)
 
+    if image_data and audio_data:
+        multimodal_hint = "The user provided both a screenshot of the canvas and a voice recording. Analyze the visual state and listen to the audio carefully."
+    elif image_data:
+        multimodal_hint = "The user provided a screenshot of the canvas. Analyze the visual layout to inform your response."
+    elif audio_data:
+        multimodal_hint = "The user provided a voice recording. Listen to the audio to understand their request."
+    else:
+        multimodal_hint = ""
+
     user_prompt = (
         f"=== CANVAS STATE ===\n"
         f"{canvas_context}\n\n"
         f"=== USER REQUEST ===\n"
-        f"{user_message}"
+        f"{user_message}\n\n"
+        f"{multimodal_hint}"
     )
 
     full_prompt = f"{system_prompt}\n\n{user_prompt}"
-    raw = call_gemini(full_prompt, image_data=image_data, audio_data=audio_data)
+
+    print(
+        f"[agent] LLM prompt length={len(full_prompt)}, "
+        f"image={'yes' if image_data else 'no'}, "
+        f"audio={'yes' if audio_data else 'no'}"
+    )
+    raw = _call_llm(full_prompt, image_data, audio_data)
+    print(f"[agent] raw response: {repr(raw[:300])}")
 
     return _parse_actions(raw)

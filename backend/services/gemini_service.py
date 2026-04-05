@@ -1,66 +1,95 @@
 """
 gemini_service.py
-Thin wrapper around the Google Generative AI SDK.
+Thin wrapper around the Google Generative AI SDK (google-genai, not deprecated google.generativeai).
 """
 
+from __future__ import annotations
+
 import base64
-import logging
 import os
-from typing import Optional
+
 from google import genai
 from google.genai import types
 
-logger = logging.getLogger(__name__)
-
-_configured = False
-
-
-def _ensure_configured():
-    """Ensure an API key is available (GEMINI_API_KEY or GOOGLE_API_KEY)."""
-    global _configured
-    if not _configured:
-        if not (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")):
-            raise RuntimeError(
-                "GEMINI_API_KEY is not set. "
-                "Copy backend/.env.example to backend/.env and add your key."
-            )
-        _configured = True
+# Used for multimodal only (screenshot + voice). Use a stable model id to avoid 404s.
+MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 
-def _decode_data_uri_payload(data_uri: str) -> bytes:
-    """Strip data:*;base64, prefix if present (split on comma, take index 1), decode."""
-    s = data_uri.strip()
-    if "," in s:
-        raw_b64 = s.split(",", 1)[1]
-    else:
-        raw_b64 = s
-    return base64.b64decode(raw_b64)
+def _api_key() -> str:
+    key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not key:
+        raise RuntimeError(
+            "GEMINI_API_KEY or GOOGLE_API_KEY must be set (e.g. in backend/.env)."
+        )
+    return key
+
+
+_client: genai.Client | None = None
+
+
+def _get_client() -> genai.Client:
+    global _client
+    if _client is None:
+        _client = genai.Client(api_key=_api_key())
+    return _client
 
 
 def call_gemini(
-    prompt: str, image_data: Optional[str] = None, audio_data: Optional[str] = None
+    prompt: str,
+    image_data: str | None = None,
+    audio_data: str | None = None,
 ) -> str:
+    parts: list = [types.Part.from_text(text=prompt)]
+
+    if image_data:
+        raw_b64 = image_data
+        mime = "image/png"
+        if "," in image_data:
+            prefix, raw_b64 = image_data.split(",", 1)
+            if "jpeg" in prefix or "jpg" in prefix:
+                mime = "image/jpeg"
+            elif "gif" in prefix:
+                mime = "image/gif"
+            elif "webp" in prefix:
+                mime = "image/webp"
+
+        parts.append(
+            types.Part.from_bytes(
+                data=base64.b64decode(raw_b64),
+                mime_type=mime,
+            )
+        )
+
+    if audio_data:
+        raw_b64 = audio_data
+        mime = "audio/webm"
+        if "," in audio_data:
+            prefix, raw_b64 = audio_data.split(",", 1)
+            if "mp4" in prefix:
+                mime = "audio/mp4"
+            elif "mpeg" in prefix:
+                mime = "audio/mpeg"
+            elif "wav" in prefix:
+                mime = "audio/wav"
+            elif "ogg" in prefix:
+                mime = "audio/ogg"
+            elif "webm" in prefix:
+                mime = "audio/webm"
+
+        parts.append(
+            types.Part.from_bytes(
+                data=base64.b64decode(raw_b64),
+                mime_type=mime,
+            )
+        )
+
+
     try:
-        _ensure_configured()
-
-        parts: list = [types.Part.from_text(text=prompt)]
-
-        if image_data:
-            decoded = _decode_data_uri_payload(image_data)
-            parts.append(types.Part.from_bytes(data=decoded, mime_type="image/png"))
-
-        if audio_data:
-            decoded = _decode_data_uri_payload(audio_data)
-            parts.append(types.Part.from_bytes(data=decoded, mime_type="audio/webm"))
-
-        model = "gemini-2.5-flash-preview-04-17"
-
-        client = genai.Client()
-        response = client.models.generate_content(
-            model=model,
+        response = _get_client().models.generate_content(
+            model=MODEL,
             contents=parts,
         )
         return response.text or ""
-    except Exception as exc:
-        logger.exception("call_gemini failed: %s", exc)
-        return '{"action": "place_sticky", "content": "I had trouble processing that", "x": 400, "y": 400, "reasoning": "fallback due to error", "tentative": false}'
+    except Exception as e:
+        print(f"call_gemini failed: {e}")
+        raise

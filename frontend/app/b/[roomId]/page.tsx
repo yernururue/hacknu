@@ -11,7 +11,7 @@ import { useBoardsList } from "@/hooks/useBoardsList";
 import { useRouter } from "next/navigation";
 import ChatInput from "@/components/ChatInput";
 import { agentCanvasLayerComponents } from "@/components/AgentCanvasLayers";
-import { AgentMode, sendToAgent, extractCanvasShapes } from "@/lib/agent";
+import { AgentMode, sendToAgent, extractCanvasShapes, captureCanvasScreenshot } from "@/lib/agent";
 import { getEditor, applyBackendAgentAction } from "@/lib/agentActions";
 
 function TopNavWrapper() {
@@ -142,6 +142,7 @@ export default function BoardPage({ params }: { params: Promise<{ roomId: string
     if (!editor) return;
 
     const shapes = extractCanvasShapes(editor);
+    const screenshot = await captureCanvasScreenshot(editor);
     setSummarizeLoading(true);
 
     try {
@@ -149,7 +150,9 @@ export default function BoardPage({ params }: { params: Promise<{ roomId: string
         "Analyze the current canvas: identify patterns, gaps, and connections between ideas",
         shapes,
         agentMode,
-        roomId
+        roomId,
+        undefined,
+        screenshot
       );
       for (const action of actions) {
         applyBackendAgentAction(action);

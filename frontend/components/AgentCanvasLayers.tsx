@@ -5,7 +5,15 @@
  * connector arrows (above stickies). Wired via TLComponents OnTheCanvas + Overlays.
  */
 
-import { useEditor, useValue, type TLGeoShape, type TLShape, type TLShapeId } from "tldraw";
+import {
+  useEditor,
+  useValue,
+  type TLGeoShape,
+  type TLNoteShape,
+  type TLShape,
+  type TLShapeId,
+} from "tldraw";
+import { GenerateMediaButton, notePlainText } from "@/components/GenerateMediaButton";
 
 export const colorMap: Record<string, string> = {
   yellow: "#FCD34D",
@@ -157,7 +165,7 @@ function renderArrow(shape: ArrowModel, shapes: TLShape[], editor: ReturnType<ty
 /**
  * Renders behind tldraw shapes (same layer order as OnTheCanvas — before ShapesLayer).
  */
-export function AgentGroupRectLayer() {
+function AgentGroupRectSvgLayer() {
   const editor = useEditor();
   const groupRects = useValue(
     "agent-group-rect-models",
@@ -186,6 +194,117 @@ export function AgentGroupRectLayer() {
         }
       })}
     </svg>
+  );
+}
+
+/** HTML controls + media badges on stickies (inside tldraw OnTheCanvas). */
+function StickyMediaOverlays() {
+  const editor = useEditor();
+  const notes = useValue(
+    "sticky-media-notes",
+    () => editor.getCurrentPageShapes().filter((s) => s.type === "note"),
+    [editor]
+  );
+
+  return (
+    <>
+      {notes.map((shape) => {
+        const b = editor.getShapePageBounds(shape.id);
+        if (!b) return null;
+        const note = shape as TLNoteShape;
+        const text = notePlainText(editor, note).trim() || "idea";
+        const meta = shape.meta as { videoUrl?: string; imageUrl?: string };
+
+        return (
+          <div
+            key={shape.id}
+            style={{
+              position: "absolute",
+              left: b.x,
+              top: b.y,
+              width: b.w,
+              height: b.h,
+              pointerEvents: "none",
+              zIndex: 2,
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                right: 4,
+                bottom: 4,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-end",
+                gap: 4,
+                pointerEvents: "auto",
+              }}
+            >
+              {meta.videoUrl ? (
+                <a
+                  href={meta.videoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    width: 26,
+                    height: 26,
+                    background: "#6366F1",
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "white",
+                    fontSize: 12,
+                    textDecoration: "none",
+                    pointerEvents: "all",
+                    boxShadow: "0 2px 8px rgba(99,102,241,0.5)",
+                    zIndex: 1000,
+                  }}
+                  title="Watch generated video"
+                >
+                  ▶
+                </a>
+              ) : null}
+              {meta.imageUrl && !meta.videoUrl ? (
+                <a
+                  href={meta.imageUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    width: 26,
+                    height: 26,
+                    background: "#10B981",
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "white",
+                    fontSize: 12,
+                    textDecoration: "none",
+                    pointerEvents: "all",
+                    zIndex: 1000,
+                  }}
+                  title="View generated image"
+                >
+                  🖼
+                </a>
+              ) : null}
+              <GenerateMediaButton stickyId={shape.id} stickyText={text} />
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+/** Group rects behind shapes; sticky media UI in front of group SVG but still before shape DOM order — stickies render after OnTheCanvas in tldraw, so notes stay on top. */
+export function AgentOnTheCanvas() {
+  return (
+    <>
+      <AgentGroupRectSvgLayer />
+      <StickyMediaOverlays />
+    </>
   );
 }
 
@@ -223,6 +342,6 @@ export function AgentArrowLayer() {
 
 /** Merged TLComponents entries for CollaborativeTldraw / Tldraw */
 export const agentCanvasLayerComponents = {
-  OnTheCanvas: AgentGroupRectLayer,
+  OnTheCanvas: AgentOnTheCanvas,
   Overlays: AgentArrowLayer,
 };
