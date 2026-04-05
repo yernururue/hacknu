@@ -65,16 +65,15 @@ def call_gemini(
         mime = "audio/webm"
         if "," in audio_data:
             prefix, raw_b64 = audio_data.split(",", 1)
-            if "mp4" in prefix:
-                mime = "audio/mp4"
-            elif "mpeg" in prefix:
-                mime = "audio/mpeg"
-            elif "wav" in prefix:
-                mime = "audio/wav"
-            elif "ogg" in prefix:
-                mime = "audio/ogg"
-            elif "webm" in prefix:
-                mime = "audio/webm"
+            try:
+                mime = prefix.split(":")[1].split(";")[0]
+            except IndexError:
+                pass
+
+        # Ensure correct padding if missing
+        padding_needed = 4 - (len(raw_b64) % 4)
+        if padding_needed and padding_needed != 4:
+            raw_b64 += "=" * padding_needed
 
         parts.append(
             types.Part.from_bytes(

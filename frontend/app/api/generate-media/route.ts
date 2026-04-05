@@ -91,7 +91,7 @@ Idea: "${stickyText}"`,
         const videoUrl = await generateVideoFromImage(imageUrl, cinematicPrompt);
         send("done", { imageUrl, videoUrl, prompt: cinematicPrompt });
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Generation failed";
+        const message = "ai is not working";
         console.error("[generate-media] ERROR:", err);
         send("error", { message });
       } finally {
