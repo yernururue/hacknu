@@ -121,7 +121,8 @@ export async function sendToAgent(
   canvasShapes: CanvasShapePayload[],
   mode: AgentMode,
   sessionId: string = DEFAULT_SESSION_ID,
-  audioData?: string
+  audioData?: string,
+  imageData?: string
 ): Promise<AgentAction[]> {
   const response = await fetch(`${BACKEND_URL}/agent/message`, {
     method: "POST",
@@ -132,6 +133,7 @@ export async function sendToAgent(
       session_id: sessionId,
       agent_mode: mode,
       ...(audioData !== undefined && audioData !== "" ? { audio_data: audioData } : {}),
+      ...(imageData !== undefined && imageData !== "" ? { image_data: imageData } : {}),
     }),
   });
 

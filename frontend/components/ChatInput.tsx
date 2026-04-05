@@ -28,7 +28,9 @@ export default function ChatInput({
   const [statusText, setStatusText] = useState("");
   const [generationModalType, setGenerationModalType] = useState<"video" | "image" | null>(null);
   const [selectedModel, setSelectedModel] = useState("default");
+  const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -36,7 +38,7 @@ export default function ChatInput({
   const shouldSendVoiceRef = useRef(false);
 
   const submitToAgent = useCallback(
-    async (message: string, audioData?: string) => {
+    async (message: string, audioData?: string, imageData?: string) => {
       const editor = getEditor();
       if (!editor) {
         setStatusText("Editor not ready");
@@ -49,7 +51,7 @@ export default function ChatInput({
 
       let streamFailed = false;
       try {
-        const actions = await sendToAgent(message, shapes, agentMode, sessionId, audioData);
+        const actions = await sendToAgent(message, shapes, agentMode, sessionId, audioData, imageData);
         setStatusText("Processing…");
         for (const action of actions) {
           applyBackendAgentAction(action);
@@ -161,7 +163,8 @@ export default function ChatInput({
     }
 
     const trimmed = input.trim();
-    if (!trimmed || isLoading || !agentEnabled) return;
+    if (!trimmed && !attachedImage) return;
+    if (isLoading || !agentEnabled) return;
 
     const editor = getEditor();
     if (!editor) {
@@ -170,8 +173,35 @@ export default function ChatInput({
     }
 
     setInput("");
-    await submitToAgent(trimmed);
-  }, [input, isLoading, agentEnabled, isRecording, submitToAgent]);
+    const imgData = attachedImage;
+    setAttachedImage(null);
+    await submitToAgent(trimmed, undefined, imgData ?? undefined);
+  }, [input, isLoading, agentEnabled, isRecording, submitToAgent, attachedImage]);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setStatusText("Error: Please upload an image file");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      if (typeof ev.target?.result === "string") {
+        setAttachedImage(ev.target.result);
+        setStatusText("Attach successful");
+      }
+    };
+    reader.onerror = () => {
+      setStatusText("Error reading file");
+    };
+    reader.readAsDataURL(file);
+    
+    // clear input so same file can be chosen again
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -257,6 +287,18 @@ export default function ChatInput({
           padding: "0 4px",
         }}
       >
+        {attachedImage && (
+          <div style={{ position: "relative", width: 28, height: 28, borderRadius: 6, overflow: "hidden", flexShrink: 0, border: "1px solid #e5e7eb" }}>
+            <img src={attachedImage} alt="Attachment" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <button
+              onClick={() => setAttachedImage(null)}
+              style={{ position: "absolute", top: -2, right: -2, background: "rgba(0,0,0,0.5)", border: "none", color: "#fff", width: 14, height: 14, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, cursor: "pointer", padding: 0 }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         {!isRecording ? (
           <button
             type="button"
@@ -431,10 +473,19 @@ export default function ChatInput({
       {/* Bottom Row: + and Instruments */}
       {!isRecording && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 8, paddingBottom: 4 }}>
+          {/* Hidden file input */}
+          <input
+            type="file"
+            accept="image/*"
+            ref={fileInputRef}
+            style={{ display: "none" }}
+            onChange={handleFileChange}
+          />
           {/* Plus icon button */}
           <button
             type="button"
-            title="Upload Media (coming soon)"
+            title="Upload Media"
+            onClick={() => fileInputRef.current?.click()}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 26, height: 26,
