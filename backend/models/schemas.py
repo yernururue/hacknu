@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -28,8 +29,8 @@ class AgentRequest(BaseModel):
     )
     session_id: str = Field(default="default", description="Session identifier")
     agent_mode: str = Field(default="idea_generator", description="AI persona mode")
-    image_data: str | None = None  # base64-encoded canvas screenshot (e.g. PNG)
-    audio_data: str | None = None  # base64-encoded voice recording (e.g. webm/mp3)
+    image_data: Optional[str] = None  # base64-encoded canvas screenshot (e.g. PNG)
+    audio_data: Optional[str] = None  # base64-encoded voice recording (e.g. webm/mp3)
 
 
 class StickyAction(BaseModel):

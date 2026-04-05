@@ -8,17 +8,26 @@ interface ChatInputProps {
   agentMode: AgentMode;
   agentEnabled: boolean;
   sessionId?: string;
+  onSummarize?: () => void;
+  onAnalyze?: () => void;
+  isPanelLoading?: boolean;
 }
 
 export default function ChatInput({
   agentMode,
   agentEnabled,
   sessionId = DEFAULT_SESSION_ID,
+  onSummarize,
+  onAnalyze,
+  isPanelLoading = false,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [showTools, setShowTools] = useState(false);
   const [statusText, setStatusText] = useState("");
+  const [generationModalType, setGenerationModalType] = useState<"video" | "image" | null>(null);
+  const [selectedModel, setSelectedModel] = useState("default");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -181,6 +190,7 @@ export default function ChatInput({
   const sendDisabled = isLoading || (!input.trim() && !isRecording);
 
   return (
+    <>
     <div
       style={{
         position: "absolute",
@@ -190,8 +200,15 @@ export default function ChatInput({
         width: "fit-content", // matches toolbar's auto width behavior
         minWidth: 440,
         maxWidth: 520,
-        padding: 0,
+        padding: "8px",
+        background: "#ffffff",
+        border: "1px solid #e2e5e9",
+        borderRadius: 16,
+        boxShadow: "0 4px 12px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)",
         zIndex: 3000,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
         fontFamily: "'Inter', 'ui-sans-serif', system-ui, sans-serif",
       }}
     >
@@ -212,7 +229,7 @@ export default function ChatInput({
         <div
           style={{
             textAlign: "center",
-            marginBottom: 5,
+            marginTop: 4,
           }}
         >
           <span
@@ -231,17 +248,13 @@ export default function ChatInput({
         </div>
       )}
 
-      {/* Input bar — matches Tldraw toolbar shape */}
+      {/* Top Row: Input bar */}
       <div
         style={{
-          background: "#ffffff",
-          border: "1px solid #e2e5e9",
-          borderRadius: 12, // same radius as Tldraw toolbar
-          padding: "5px 5px 5px 6px",
           display: "flex",
           alignItems: "center",
           gap: 6,
-          boxShadow: "0 2px 6px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)", // same shadow as toolbar
+          padding: "0 4px",
         }}
       >
         {!isRecording ? (
@@ -414,6 +427,209 @@ export default function ChatInput({
           )}
         </button>
       </div>
+
+      {/* Bottom Row: + and Instruments */}
+      {!isRecording && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 8, paddingBottom: 4 }}>
+          {/* Plus icon button */}
+          <button
+            type="button"
+            title="Upload Media (coming soon)"
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 26, height: 26,
+              borderRadius: "50%",
+              background: "transparent", border: "1px solid #e5e7eb",
+              color: "#6b7280", cursor: "pointer",
+              transition: "background 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.background = "#f3f4f6";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.background = "transparent";
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+          
+          {/* Instruments Button and Dropdown */}
+          <div style={{ position: "relative" }}>
+            <button
+               type="button"
+               onClick={() => setShowTools(!showTools)}
+               style={{
+                 display: "flex", alignItems: "center", gap: 6,
+                 fontSize: 12, fontWeight: 500, color: "#4b5563",
+                 background: showTools ? "#f3f4f6" : "transparent",
+                 border: "none", borderRadius: 8, padding: "6px 10px",
+                 cursor: "pointer", transition: "background 0.15s",
+               }}
+               onMouseEnter={(e) => {
+                 (e.currentTarget as HTMLElement).style.background = "#f3f4f6";
+               }}
+               onMouseLeave={(e) => {
+                 (e.currentTarget as HTMLElement).style.background = showTools ? "#f3f4f6" : "transparent";
+               }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+              Инструменты
+            </button>
+
+            {showTools && (
+              <div style={{
+                position: "absolute", bottom: "100%", left: 0, marginBottom: 8,
+                background: "#ffffff", border: "1px solid #e2e5e9", borderRadius: 12,
+                padding: "8px", width: 220, boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                display: "flex", flexDirection: "column", gap: 4, zIndex: 10
+              }}>
+                <button
+                  disabled={isPanelLoading || isLoading}
+                  onClick={() => { onSummarize?.(); setShowTools(false); }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px",
+                    background: "transparent", border: "none", borderRadius: 6,
+                    fontSize: 13, color: "#374151", cursor: (isPanelLoading || isLoading) ? "default" : "pointer",
+                    opacity: (isPanelLoading || isLoading) ? 0.5 : 1, textAlign: "left"
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isPanelLoading && !isLoading) (e.currentTarget as HTMLElement).style.background = "#f3f4f6";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "transparent";
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="21" y1="10" x2="3" y2="10"></line><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="21" y1="18" x2="3" y2="18"></line></svg>
+                  Summarize Canvas
+                </button>
+                <button
+                  disabled={isPanelLoading || isLoading}
+                  onClick={() => { onAnalyze?.(); setShowTools(false); }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px",
+                    background: "transparent", border: "none", borderRadius: 6,
+                    fontSize: 13, color: "#374151", cursor: (isPanelLoading || isLoading) ? "default" : "pointer",
+                    opacity: (isPanelLoading || isLoading) ? 0.5 : 1, textAlign: "left"
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isPanelLoading && !isLoading) (e.currentTarget as HTMLElement).style.background = "#f3f4f6";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "transparent";
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  Analyze Screen
+                </button>
+                <button
+                  onClick={() => { setGenerationModalType("video"); setShowTools(false); setSelectedModel("default"); }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px",
+                    background: "transparent", border: "none", borderRadius: 6,
+                    fontSize: 13, color: "#374151", cursor: "pointer", textAlign: "left"
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "#f3f4f6";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "transparent";
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>
+                  Generate Video
+                </button>
+                <button
+                  onClick={() => { setGenerationModalType("image"); setShowTools(false); setSelectedModel("default"); }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px",
+                    background: "transparent", border: "none", borderRadius: 6,
+                    fontSize: 13, color: "#374151", cursor: "pointer", textAlign: "left"
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "#f3f4f6";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "transparent";
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                  Generate Image
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
+
+    {generationModalType && (
+      <div style={{
+        position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+        background: "rgba(0,0,0,0.4)", zIndex: 10000,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        pointerEvents: "auto"
+      }}>
+        <div style={{
+          background: "#fff", borderRadius: 16, padding: 24, width: 440,
+          boxShadow: "0 10px 25px rgba(0,0,0,0.2)", display: "flex", flexDirection: "column", gap: 16,
+          fontFamily: "'Inter', 'ui-sans-serif', system-ui, sans-serif"
+        }}>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "#111827" }}>
+            Generate {generationModalType === "video" ? "Video" : "Image"}
+          </h3>
+          <p style={{ margin: 0, fontSize: 14, color: "#4b5563" }}>
+            Select a model to use for {generationModalType === "video" ? "video" : "image"} generation.
+          </p>
+          
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <label style={{ fontSize: 13, fontWeight: 500, color: "#374151" }}>Available Models (from API)</label>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              style={{
+                width: "100%", padding: "10px 12px", borderRadius: 8,
+                border: "1px solid #d1d5db", fontSize: 14, background: "#fff",
+                outline: "none", color: "#111827"
+              }}
+            >
+              <option value="default">{generationModalType === "video" ? "Higgsfield Video Model" : "Midjourney (via Agent)"}</option>
+              <option value="dalle3">{generationModalType === "image" ? "DALL-E 3" : "Sora (coming soon)"}</option>
+            </select>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, marginTop: 8 }}>
+            <button
+              onClick={() => setGenerationModalType(null)}
+              style={{
+                background: "transparent", border: "none", fontSize: 14, fontWeight: 500,
+                color: "#6b7280", padding: "8px 16px", cursor: "pointer", borderRadius: 8,
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                alert(`Triggering ${generationModalType} generation with model: ${selectedModel}`);
+                setGenerationModalType(null);
+              }}
+              style={{
+                background: "#111827", border: "none", fontSize: 14, fontWeight: 500,
+                color: "#fff", padding: "8px 16px", cursor: "pointer", borderRadius: 8,
+                boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
+              }}
+            >
+              Generate
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

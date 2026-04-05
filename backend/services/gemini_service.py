@@ -6,6 +6,7 @@ Thin wrapper around the Google Generative AI SDK.
 import json
 import logging
 import os
+from typing import Optional
 from google import genai
 from google.genai import types  # noqa: F401
 
@@ -28,7 +29,7 @@ def _ensure_configured():
 
 
 def call_gemini(
-    prompt: str, image_data: str | None = None, audio_data: str | None = None
+    prompt: str, image_data: Optional[str] = None, audio_data: Optional[str] = None
 ) -> str:
     try:
         _ensure_configured()

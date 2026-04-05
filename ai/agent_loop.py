@@ -5,6 +5,7 @@ Core AI agent: loads prompts, calls Gemini, parses response into action dicts.
 
 import json
 from pathlib import Path
+from typing import Optional
 
 from backend.models.schemas import FALLBACK_ACTION, CanvasShape
 from backend.services.gemini_service import call_gemini
@@ -83,8 +84,8 @@ def run_agent(
     canvas_context: str,
     user_message: str,
     agent_mode: str = "idea_generator",
-    image_data: str | None = None,
-    audio_data: str | None = None,
+    image_data: Optional[str] = None,
+    audio_data: Optional[str] = None,
 ) -> list[dict]:
     """
     Main agent function called by the backend.

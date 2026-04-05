@@ -10,7 +10,6 @@ import { useBoard } from "@/hooks/useBoard";
 import { useBoardsList } from "@/hooks/useBoardsList";
 import { useRouter } from "next/navigation";
 import ChatInput from "@/components/ChatInput";
-import ControlPanel from "@/components/ControlPanel";
 import { agentCanvasLayerComponents } from "@/components/AgentCanvasLayers";
 import { AgentMode, sendToAgent, extractCanvasShapes } from "@/lib/agent";
 import { getEditor, applyBackendAgentAction } from "@/lib/agentActions";
@@ -174,19 +173,13 @@ export default function BoardPage({ params }: { params: Promise<{ roomId: string
           <div style={{ position: "absolute", zIndex: 1000, pointerEvents: "none", inset: 0 }}>
             {/* We re-enable pointer events for the actual children */}
             <div style={{ pointerEvents: "auto" }}>
-              <ControlPanel
-                agentEnabled={agentEnabled}
-                onToggleAgent={setAgentEnabled}
-                agentMode={agentMode}
-                onChangeMode={setAgentMode}
-                onSummarize={handleSummarize}
-                onAnalyze={handleAnalyze}
-                isLoading={summarizeLoading}
-              />
               <ChatInput
                 agentEnabled={agentEnabled}
                 agentMode={agentMode}
                 sessionId={roomId}
+                onSummarize={handleSummarize}
+                onAnalyze={handleAnalyze}
+                isPanelLoading={summarizeLoading}
               />
             </div>
           </div>
