@@ -16,7 +16,7 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 
 app = FastAPI(
     title="AI Brainstorm Canvas",
-    description="Backend for AI-powered brainstorming canvas with Gemini",
+    description="Backend for AI-powered brainstorming canvas (Groq + Gemini multimodal)",
     version="1.0.0",
 )
 

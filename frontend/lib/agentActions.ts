@@ -17,6 +17,8 @@ import { createShapeId } from "tldraw";
 import { toRichText } from "@tldraw/tlschema";
 import type { TLDefaultColorStyle } from "@tldraw/tlschema";
 import type { AgentAction } from "@/lib/agent";
+import { notePlainText } from "@/components/GenerateMediaButton";
+import { consumeGenerateMediaSse } from "@/lib/generateMediaSse";
 
 // --- Types for programmatic placement (non-SSE) ---
 
@@ -89,10 +91,100 @@ export function getAgentShapeViews(editor: Editor): AgentShapeView[] {
 }
 
 /**
- * Stub for Higgsfield video generation (implemented in a follow-up task).
+ * Runs the same pipeline as the sticky “Generate Video” button (Claude → image → video).
  */
+/**
+ * Instruments menu: create a sticky and run Higgsfield image and/or video generation from a free-form prompt.
+ */
+export function runHiggsfieldFromPrompt(prompt: string, mode: "image" | "video"): void {
+  const editor = _editor;
+  if (!editor) {
+    console.warn("[agentActions] Editor not ready for Higgsfield generation");
+    return;
+  }
+  const trimmed = prompt.trim();
+  if (!trimmed) return;
+
+  const shapeId = createShapeId(`media-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
+  const vp = editor.getViewportPageBounds();
+  const x = vp.x + vp.w / 2 - 160;
+  const y = vp.y + vp.h / 2 - 100;
+
+  editor.createShape<TLNoteShape>({
+    id: shapeId,
+    type: "note",
+    x,
+    y,
+    props: {
+      color: "light-violet",
+      labelColor: "black",
+      size: "m",
+      font: "draw",
+      fontSizeAdjustment: 0,
+      align: "middle",
+      verticalAlign: "middle",
+      growY: 0,
+      url: "",
+      richText: toRichText(trimmed),
+      scale: 1,
+    },
+    meta: { isAgentShape: true },
+  });
+
+  void (async () => {
+    try {
+      const res = await fetch("/api/generate-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stickyText: trimmed, mode }),
+      });
+      if (!res.ok) {
+        let detail = `HTTP ${res.status}`;
+        try {
+          const j = (await res.json()) as { error?: string };
+          if (j.error) detail = j.error;
+        } catch {
+          /* ignore */
+        }
+        console.error("[runHiggsfieldFromPrompt]", detail);
+        return;
+      }
+      const reader = res.body?.getReader();
+      if (!reader) return;
+      await consumeGenerateMediaSse(reader, editor, shapeId as string);
+    } catch (e) {
+      console.error("[runHiggsfieldFromPrompt]", e);
+    }
+  })();
+}
+
 export function triggerVideoGeneration(sourceStickyId: string, prompt: string): void {
-  console.info("[agentActions] generate_video (stub):", { sourceStickyId, prompt });
+  const editor = _editor;
+  if (!editor) {
+    console.warn("[agentActions] Editor not ready for generate_video");
+    return;
+  }
+  const shape = editor.getShape(sourceStickyId as TLShapeId);
+  let stickyText = prompt;
+  if (shape?.type === "note") {
+    const t = notePlainText(editor, shape as TLNoteShape).trim();
+    if (t) stickyText = t;
+  }
+
+  void (async () => {
+    try {
+      const res = await fetch("/api/generate-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stickyText }),
+      });
+      const reader = res.body?.getReader();
+      if (!reader) return;
+      await consumeGenerateMediaSse(reader, editor, sourceStickyId);
+    } catch (e) {
+      console.error("[agentActions] generate_video failed", e);
+    }
+  })();
 }
 
 /**
