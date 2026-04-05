@@ -23,8 +23,8 @@ async def _event_stream(request: AgentRequest):
             canvas_context,
             request.message,
             request.agent_mode,
-            request.image_data,
-            request.audio_data,
+            image_data=request.image_data,
+            audio_data=request.audio_data,
         )
 
         for action in actions:
@@ -79,8 +79,8 @@ async def analyze_canvas(req: AgentRequest):
                 canvas_context,
                 analysis_prompt,
                 req.agent_mode,
-                req.image_data,
-                req.audio_data,
+                image_data=req.image_data,
+                audio_data=req.audio_data,
             )
 
             for action in actions:

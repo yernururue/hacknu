@@ -63,13 +63,13 @@ def _parse_actions(raw: str) -> list[dict]:
     """
     clean = raw.strip()
     if clean.startswith("```"):
-        clean = clean.split("```")[1]
-        if clean.startswith("json"):
-            clean = clean[4:]
-    clean = clean.strip()
+        lines = clean.split("\n")
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        clean = "\n".join(lines).strip()
+    raw = clean
 
     try:
-        data = json.loads(clean)
+        data = json.loads(raw)
         if isinstance(data, dict):
             data = [data]
         if not isinstance(data, list):
