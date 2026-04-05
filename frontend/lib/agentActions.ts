@@ -205,7 +205,7 @@ export function executeAgentAction(
         color: mapAgentColor(action.color, "blue"),
         labelColor: "black",
         size: "m",
-        font: "draw",
+        font: "sans",
         fontSizeAdjustment: 0,
         align: "middle",
         verticalAlign: "middle",
@@ -319,7 +319,7 @@ export function executeAgentAction(
         fill: "semi",
         dash: "draw",
         size: "s",
-        font: "draw",
+        font: "sans",
         align: "start",
         verticalAlign: "start",
         growY: 0,
@@ -383,7 +383,7 @@ export function executeAgentAction(
         arrowheadEnd: "arrow",
         richText: toRichText(labelText),
         labelPosition: 0.5,
-        font: "draw",
+        font: "sans",
         scale: 1,
       };
       editor.createShape<TLArrowShape>({
@@ -421,7 +421,7 @@ export function executeAgentAction(
       const textProps: TLTextShape["props"] = {
         color: "black",
         size: "l",
-        font: "draw",
+        font: "sans",
         textAlign: "start",
         w: 480,
         richText: toRichText(action.content ?? ""),
@@ -479,7 +479,7 @@ export function placeAgentShape(action: ProgrammaticAgentShape): void {
         color: "orange",
         labelColor: "black",
         size: "l",
-        font: "draw",
+        font: "sans",
         fontSizeAdjustment: 0,
         align: "middle",
         verticalAlign: "middle",
@@ -512,7 +512,7 @@ export function placeAgentShape(action: ProgrammaticAgentShape): void {
       arrowheadEnd: "arrow",
       richText: toRichText(action.label ?? ""),
       labelPosition: 0.5,
-      font: "draw",
+      font: "sans",
       scale: 1,
     };
     editor.createShape<TLArrowShape>({
