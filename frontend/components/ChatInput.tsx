@@ -242,6 +242,22 @@ export default function ChatInput({
         fontFamily: "'Inter', 'ui-sans-serif', system-ui, sans-serif",
       }}
     >
+      {/* Goose pixel art standing to the right of the input bar */}
+      <img
+        src={(isLoading || isPanelLoading) ? "/goose-talking.png" : "/goose.png"}
+        alt="AI Goose"
+        style={{
+          position: "absolute",
+          bottom: -64,
+          right: -80,
+          height: 64,
+          width: "auto",
+          pointerEvents: "none",
+          filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.1))",
+          transition: "bottom 0.2s ease"
+        }}
+      />
+
       {/* Inline styles for recording animation */}
       <style>{`
         @keyframes sound-wave {
