@@ -12,10 +12,9 @@ import type {
   TLNoteShape,
   TLShapeId,
   TLTextShape,
+  TLDefaultColorStyle,
 } from "tldraw";
-import { createShapeId } from "tldraw";
-import { toRichText } from "@tldraw/tlschema";
-import type { TLDefaultColorStyle } from "@tldraw/tlschema";
+import { createShapeId, toRichText } from "tldraw";
 import type { AgentAction } from "@/lib/agent";
 import { notePlainText } from "@/components/GenerateMediaButton";
 import { consumeGenerateMediaSse } from "@/lib/generateMediaSse";

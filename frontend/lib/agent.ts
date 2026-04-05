@@ -2,9 +2,8 @@
  * Connects to the FastAPI backend SSE endpoint (POST /agent/message).
  */
 
-import type { Editor, TLShape } from "tldraw";
+import type { Editor, TLShape, TLRichText } from "tldraw";
 import { renderPlaintextFromRichText } from "tldraw";
-import type { TLRichText } from "@tldraw/editor";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
