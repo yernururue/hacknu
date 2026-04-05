@@ -3,16 +3,15 @@ gemini_service.py
 Thin wrapper around the Google Generative AI SDK.
 """
 
-import json
+import base64
 import logging
 import os
 from google import genai
-from google.genai import types  # noqa: F401
+from google.genai import types
 
 logger = logging.getLogger(__name__)
 
 _configured = False
-_DEFAULT_MODEL = "gemini-2.5-flash"
 
 
 def _ensure_configured():
@@ -27,37 +26,33 @@ def _ensure_configured():
         _configured = True
 
 
+def _decode_data_uri_payload(data_uri: str) -> bytes:
+    """Strip data:*;base64, prefix if present (split on comma, take index 1), decode."""
+    s = data_uri.strip()
+    if "," in s:
+        raw_b64 = s.split(",", 1)[1]
+    else:
+        raw_b64 = s
+    return base64.b64decode(raw_b64)
+
+
 def call_gemini(
     prompt: str, image_data: str | None = None, audio_data: str | None = None
 ) -> str:
     try:
         _ensure_configured()
 
-        parts: list = [{"text": prompt}]
+        parts: list = [types.Part.from_text(text=prompt)]
 
         if image_data:
-            raw_b64 = image_data.split(",")[-1]
-            parts.append(
-                {
-                    "inline_data": {
-                        "mime_type": "image/png",
-                        "data": raw_b64,
-                    }
-                }
-            )
+            decoded = _decode_data_uri_payload(image_data)
+            parts.append(types.Part.from_bytes(data=decoded, mime_type="image/png"))
 
         if audio_data:
-            raw_b64 = audio_data.split(",")[-1]
-            parts.append(
-                {
-                    "inline_data": {
-                        "mime_type": "audio/webm",
-                        "data": raw_b64,
-                    }
-                }
-            )
+            decoded = _decode_data_uri_payload(audio_data)
+            parts.append(types.Part.from_bytes(data=decoded, mime_type="audio/webm"))
 
-        model = (os.getenv("GEMINI_MODEL") or _DEFAULT_MODEL).strip() or _DEFAULT_MODEL
+        model = "gemini-2.5-flash-preview-04-17"
 
         client = genai.Client()
         response = client.models.generate_content(
@@ -67,22 +62,4 @@ def call_gemini(
         return response.text or ""
     except Exception as exc:
         logger.exception("call_gemini failed: %s", exc)
-        err = str(exc)
-        content = "I had trouble processing that"
-        if "RESOURCE_EXHAUSTED" in err or (
-            "429" in err and "quota" in err.lower()
-        ):
-            content = (
-                "Gemini quota or rate limit hit — wait and retry, check billing, "
-                "or set GEMINI_MODEL in .env (e.g. gemini-2.5-flash)."
-            )
-        return json.dumps(
-            {
-                "action": "place_sticky",
-                "content": content,
-                "x": 400,
-                "y": 400,
-                "reasoning": "fallback due to error",
-                "tentative": False,
-            }
-        )
+        return '{"action": "place_sticky", "content": "I had trouble processing that", "x": 400, "y": 400, "reasoning": "fallback due to error", "tentative": false}'
